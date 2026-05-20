@@ -7,7 +7,7 @@ import sys
 import threading
 import traceback
 from pathlib import Path
-from tkinter import BooleanVar, Tk, filedialog, messagebox
+from tkinter import BooleanVar, Button, Tk, filedialog, messagebox
 from tkinter import StringVar
 from tkinter import ttk
 from typing import Any
@@ -51,14 +51,28 @@ VIDEO_QUALITY_DETAILS = {
 }
 
 
+def set_choice_button_style(button: Button, selected: bool) -> None:
+    button.configure(
+        background="#dbeafe" if selected else "#ffffff",
+        activebackground="#bfdbfe" if selected else "#f8fafc",
+        foreground="#111827",
+        activeforeground="#111827",
+        disabledforeground="#6b7280",
+        highlightbackground="#2563eb" if selected else "#9ca3af",
+        highlightcolor="#2563eb",
+        highlightthickness=1,
+        relief="sunken" if selected else "raised",
+    )
+
+
 class MainWindow:
     def __init__(self, root: Tk) -> None:
         self.root = root
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.worker: threading.Thread | None = None
         self.last_output_dir = DEFAULT_OUTPUT_DIR
-        self.media_buttons: list[ttk.Radiobutton] = []
-        self.video_option_buttons: list[ttk.Checkbutton] = []
+        self.media_buttons: list[tuple[str, Button]] = []
+        self.video_option_buttons: list[Button] = []
 
         self.url_var = StringVar()
         self.output_var = StringVar(value=str(DEFAULT_OUTPUT_DIR))
@@ -76,7 +90,7 @@ class MainWindow:
         self.root.after(100, self._poll_events)
 
     def _build_ui(self) -> None:
-        self.root.option_add("*TCombobox*Listbox.font", "Segoe UI 12")
+        self.root.option_add("*TCombobox*Listbox.font", "{Segoe UI} 12")
         style = ttk.Style(self.root)
         style.configure("TLabel", font=("Segoe UI", 10))
         style.configure("Section.TLabel", font=("Segoe UI", 10, "bold"))
@@ -84,10 +98,6 @@ class MainWindow:
         style.configure("TEntry", padding=(8, 7))
         style.configure("TCombobox", font=("Segoe UI", 11), padding=(10, 9))
         style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
-        style.configure("Mode.Toolbutton", font=("Segoe UI", 10, "bold"), padding=(18, 9), relief="raised", borderwidth=1)
-        style.map("Mode.Toolbutton", relief=[("selected", "sunken"), ("pressed", "sunken"), ("!selected", "raised")])
-        style.configure("Option.Toolbutton", font=("Segoe UI", 10, "bold"), padding=(14, 9), relief="raised", borderwidth=1)
-        style.map("Option.Toolbutton", relief=[("selected", "sunken"), ("pressed", "sunken"), ("!selected", "raised")])
         style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(20, 9))
 
         frame = ttk.Frame(self.root, padding=24)
@@ -121,32 +131,48 @@ class MainWindow:
         media_row.grid(row=0, column=1, sticky="w")
         self.media_buttons = []
         for index, (label, value) in enumerate(MEDIA_OPTIONS):
-            button = ttk.Radiobutton(
+            button = Button(
                 media_row,
                 text=label,
-                value=value,
-                variable=self.media_var,
-                command=self.on_media_changed,
-                style="Mode.Toolbutton",
+                command=lambda selected=value: self.set_media(selected),
+                font=("Segoe UI", 10, "bold"),
+                padx=18,
+                pady=8,
+                borderwidth=1,
+                relief="raised",
+                cursor="hand2",
+                takefocus=True,
             )
             button.grid(row=0, column=index, sticky="w", padx=(0, 8) if index == 0 else (0, 0), ipady=2)
-            self.media_buttons.append(button)
+            self.media_buttons.append((value, button))
 
         self.video_options_frame = ttk.Frame(mode_row)
         self.video_options_frame.grid(row=0, column=3, sticky="e")
         self.video_option_buttons = []
-        self.subtitle_check = ttk.Checkbutton(
+        self.subtitle_check = Button(
             self.video_options_frame,
             text="자막 포함 · 한글/영어",
-            variable=self.include_subtitles_var,
-            style="Option.Toolbutton",
+            command=self.toggle_subtitles,
+            font=("Segoe UI", 10, "bold"),
+            padx=14,
+            pady=8,
+            borderwidth=1,
+            relief="raised",
+            cursor="hand2",
+            takefocus=True,
         )
         self.subtitle_check.grid(row=0, column=0, sticky="e", padx=(0, 8), ipady=2)
-        self.multi_audio_check = ttk.Checkbutton(
+        self.multi_audio_check = Button(
             self.video_options_frame,
             text="다중 오디오 · 원본/한국어",
-            variable=self.include_multi_audio_var,
-            style="Option.Toolbutton",
+            command=self.toggle_multi_audio,
+            font=("Segoe UI", 10, "bold"),
+            padx=14,
+            pady=8,
+            borderwidth=1,
+            relief="raised",
+            cursor="hand2",
+            takefocus=True,
         )
         self.multi_audio_check.grid(row=0, column=1, sticky="e", ipady=2)
         self.video_option_buttons.extend([self.subtitle_check, self.multi_audio_check])
@@ -196,8 +222,21 @@ class MainWindow:
         self.open_folder_button.grid(row=1, column=0, sticky="w", pady=(14, 0))
 
         self.url_input.focus_set()
+        self.update_media_button_styles()
         self.update_video_option_visibility()
         self.update_selection_help()
+
+    def set_media(self, media_type: str) -> None:
+        self.media_var.set(media_type)
+        self.on_media_changed()
+
+    def toggle_subtitles(self) -> None:
+        self.include_subtitles_var.set(not self.include_subtitles_var.get())
+        self.update_video_option_button_styles()
+
+    def toggle_multi_audio(self) -> None:
+        self.include_multi_audio_var.set(not self.include_multi_audio_var.get())
+        self.update_video_option_button_styles()
 
     def on_media_changed(self, _event: object | None = None) -> None:
         if self.selected_media() == "video":
@@ -214,6 +253,7 @@ class MainWindow:
                 height=len(FORMAT_OPTIONS),
             )
             self.format_var.set(FORMAT_OPTIONS[0][0])
+        self.update_media_button_styles()
         self.update_video_option_visibility()
         self.update_selection_help()
 
@@ -231,6 +271,16 @@ class MainWindow:
             self.video_options_frame.grid()
         else:
             self.video_options_frame.grid_remove()
+        self.update_video_option_button_styles()
+
+    def update_media_button_styles(self) -> None:
+        selected_media = self.selected_media()
+        for value, button in self.media_buttons:
+            set_choice_button_style(button, value == selected_media)
+
+    def update_video_option_button_styles(self) -> None:
+        set_choice_button_style(self.subtitle_check, self.include_subtitles_var.get())
+        set_choice_button_style(self.multi_audio_check, self.include_multi_audio_var.get())
 
     def choose_output_dir(self) -> None:
         initial = self.output_var.get().strip() or str(DEFAULT_OUTPUT_DIR)
@@ -402,7 +452,7 @@ class MainWindow:
         self.url_input.configure(state=state)
         self.output_input.configure(state=state)
         self.browse_button.configure(state=state)
-        for button in self.media_buttons:
+        for _value, button in self.media_buttons:
             button.configure(state=state)
         for button in self.video_option_buttons:
             button.configure(state=state)
