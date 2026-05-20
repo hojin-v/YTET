@@ -39,7 +39,7 @@ VIDEO_QUALITY_OPTIONS = [
     ("480p MP4 · 최소용량", "480"),
 ]
 AUDIO_FORMAT_DETAILS = {
-    "m4a": "M4A(AAC) · 50-90MB/시간 · Android/Windows 호환 · 커버/메타데이터",
+    "m4a": "M4A(AAC) · 50-90MB/시간 · Android/iOS/Windows 호환",
     "original": "Original Opus · 40-80MB/시간 · 최고 효율 · 일부 플레이어 코덱 필요",
     "mp3": "MP3 · 60-120MB/시간 · 구형 기기 호환 · 용량 효율 낮음",
 }
@@ -57,10 +57,11 @@ class MainWindow:
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.worker: threading.Thread | None = None
         self.last_output_dir = DEFAULT_OUTPUT_DIR
+        self.media_buttons: list[ttk.Radiobutton] = []
 
         self.url_var = StringVar()
         self.output_var = StringVar(value=str(DEFAULT_OUTPUT_DIR))
-        self.media_var = StringVar(value=MEDIA_OPTIONS[0][0])
+        self.media_var = StringVar(value=MEDIA_OPTIONS[0][1])
         self.format_var = StringVar(value=FORMAT_OPTIONS[0][0])
         self.include_subtitles_var = BooleanVar(value=False)
         self.include_multi_audio_var = BooleanVar(value=False)
@@ -80,6 +81,7 @@ class MainWindow:
         style.configure("TEntry", padding=(8, 7))
         style.configure("TCombobox", padding=(8, 7))
         style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+        style.configure("Mode.Toolbutton", font=("Segoe UI", 11, "bold"), padding=(22, 12))
         style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(20, 9))
 
         frame = ttk.Frame(self.root, padding=28)
@@ -104,20 +106,26 @@ class MainWindow:
         self.browse_button = ttk.Button(output_row, text="폴더 선택", command=self.choose_output_dir)
         self.browse_button.grid(row=0, column=1, padx=(8, 0))
 
+        ttk.Label(frame, text="추출 유형").grid(row=5, column=0, sticky="w", pady=(22, 6))
         media_row = ttk.Frame(frame)
-        media_row.grid(row=5, column=0, sticky="ew", pady=(22, 0))
+        media_row.grid(row=6, column=0, sticky="ew")
         media_row.columnconfigure(0, weight=1)
-        self.media_select = ttk.Combobox(
-            media_row,
-            textvariable=self.media_var,
-            values=[label for label, _value in MEDIA_OPTIONS],
-            state="readonly",
-        )
-        self.media_select.grid(row=0, column=0, sticky="ew", ipady=5)
-        self.media_select.bind("<<ComboboxSelected>>", self.on_media_changed)
+        media_row.columnconfigure(1, weight=1)
+        self.media_buttons = []
+        for index, (label, value) in enumerate(MEDIA_OPTIONS):
+            button = ttk.Radiobutton(
+                media_row,
+                text=label,
+                value=value,
+                variable=self.media_var,
+                command=self.on_media_changed,
+                style="Mode.Toolbutton",
+            )
+            button.grid(row=0, column=index, sticky="ew", padx=(0, 8) if index == 0 else (8, 0), ipady=3)
+            self.media_buttons.append(button)
 
         controls = ttk.Frame(frame)
-        controls.grid(row=6, column=0, sticky="ew", pady=(10, 0))
+        controls.grid(row=7, column=0, sticky="ew", pady=(14, 0))
         controls.columnconfigure(0, weight=1)
         self.format_select = ttk.Combobox(
             controls,
@@ -131,7 +139,7 @@ class MainWindow:
         self.extract_button.grid(row=0, column=1, padx=(10, 0))
 
         self.video_options_frame = ttk.Frame(frame)
-        self.video_options_frame.grid(row=7, column=0, sticky="w", pady=(12, 0))
+        self.video_options_frame.grid(row=8, column=0, sticky="w", pady=(12, 0))
         self.subtitle_check = ttk.Checkbutton(
             self.video_options_frame,
             text="자막 포함",
@@ -151,18 +159,18 @@ class MainWindow:
             wraplength=780,
             justify="left",
         )
-        self.selection_help_label.grid(row=8, column=0, sticky="ew", pady=(10, 0))
+        self.selection_help_label.grid(row=9, column=0, sticky="ew", pady=(10, 0))
 
         self.progress = ttk.Progressbar(frame, maximum=100, mode="determinate")
-        self.progress.grid(row=9, column=0, sticky="ew", pady=(22, 0), ipady=3)
+        self.progress.grid(row=10, column=0, sticky="ew", pady=(22, 0), ipady=3)
 
         self.status_label = ttk.Label(frame, textvariable=self.status_var, wraplength=740)
-        self.status_label.grid(row=10, column=0, sticky="ew", pady=(12, 0))
+        self.status_label.grid(row=11, column=0, sticky="ew", pady=(12, 0))
 
         result_box = ttk.LabelFrame(frame, text="결과", padding=16)
-        result_box.grid(row=11, column=0, sticky="nsew", pady=(20, 0))
+        result_box.grid(row=12, column=0, sticky="nsew", pady=(20, 0))
         result_box.columnconfigure(0, weight=1)
-        frame.rowconfigure(11, weight=1)
+        frame.rowconfigure(12, weight=1)
         self.result_label = ttk.Label(result_box, textvariable=self.result_var, wraplength=740)
         self.result_label.grid(row=0, column=0, sticky="nw")
         self.open_folder_button = ttk.Button(
@@ -273,9 +281,8 @@ class MainWindow:
 
     def selected_media(self) -> str:
         selected = self.media_var.get()
-        for label, value in MEDIA_OPTIONS:
-            if label == selected:
-                return value
+        if selected in {value for _label, value in MEDIA_OPTIONS}:
+            return selected
         return "audio"
 
     def selected_format(self) -> str:
@@ -373,7 +380,8 @@ class MainWindow:
         self.url_input.configure(state=state)
         self.output_input.configure(state=state)
         self.browse_button.configure(state=state)
-        self.media_select.configure(state=readonly)
+        for button in self.media_buttons:
+            button.configure(state=state)
         self.subtitle_check.configure(state=state)
         self.multi_audio_check.configure(state=state)
         if busy:

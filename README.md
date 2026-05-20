@@ -55,7 +55,7 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 
 | Format | When to Use |
 | --- | --- |
-| `M4A (AAC)` | Android와 Windows에서 무난하게 재생할 기본 추천 포맷 |
+| `M4A (AAC)` | Android, iOS, Windows에서 무난하게 재생할 기본 추천 포맷 |
 | `Original Opus` | YouTube 원본 오디오에 가깝고 용량 효율이 좋은 포맷 |
 | `MP3` | 오래된 기기나 앱과의 호환성이 필요한 경우 |
 
