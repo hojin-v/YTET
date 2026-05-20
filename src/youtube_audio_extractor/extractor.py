@@ -102,6 +102,7 @@ class VideoExtractionResult:
     subtitle_files: list[ExtractedFile]
     audio_languages: list[str]
     video_quality: str | None
+    video_quality_source: str | None
     subtitles_embedded: bool
     subtitles_requested: bool
     multi_audio_requested: bool
@@ -309,6 +310,13 @@ def extract_youtube_video(
     subtitle_files = [file_record(path, mime_for_subtitle(path)) for path in rename_subtitle_sidecars(subtitle_paths, video_path)]
     subtitle_languages = actual_subtitle_languages(video_path, [Path(item.path) for item in subtitle_files])
     subtitles_embedded = bool(subtitle_stream_languages(video_path))
+    video_quality_label, video_quality_source = resolve_video_quality(
+        safe_url,
+        video_path,
+        downloaded_info,
+        selected_video_quality,
+        progress,
+    )
 
     emit(progress, stage="done", percent=100, message="영상 추출 완료")
     return VideoExtractionResult(
@@ -317,7 +325,8 @@ def extract_youtube_video(
         subtitle_languages=subtitle_languages,
         subtitle_files=subtitle_files,
         audio_languages=audio_languages,
-        video_quality=video_quality_from_file(video_path) or video_quality_from_info(downloaded_info),
+        video_quality=video_quality_label,
+        video_quality_source=video_quality_source,
         subtitles_embedded=subtitles_embedded,
         subtitles_requested=include_subtitles,
         multi_audio_requested=include_multi_audio,
@@ -630,7 +639,7 @@ def download_video(
     video_path = find_downloaded_video(output_dir)
     if include_multi_audio:
         ensure_korean_audio_if_available(video_path, info, url, progress)
-    audio_languages = audio_stream_languages(video_path)
+    audio_languages = audio_stream_languages_with_retries(video_path)
     subtitle_paths = collect_subtitle_sidecars(output_dir) if include_subtitles else []
     return file_record(video_path, mime_for_video(video_path)), subtitle_languages_from_info(info), subtitle_paths, audio_languages, info
 
@@ -1319,7 +1328,7 @@ def subtitle_languages_from_info(info: Any) -> list[str]:
 
 def actual_subtitle_languages(video_path: Path, subtitle_paths: Sequence[Path]) -> list[str]:
     languages: list[str] = []
-    for language in subtitle_stream_languages(video_path):
+    for language in subtitle_stream_languages_with_retries(video_path):
         if language not in languages:
             languages.append(language)
     for path in subtitle_paths:
@@ -1343,7 +1352,51 @@ def subtitle_stream_languages(video_path: Path) -> list[str]:
     if languages:
         return languages
     return parse_subtitle_languages_from_ffmpeg_output(ffmpeg_probe_text(video_path) or "")
-    return languages
+
+
+def resolve_video_quality(
+    url: str,
+    video_path: Path,
+    downloaded_info: Any,
+    video_quality: str,
+    progress: ProgressCallback | None = None,
+) -> tuple[str | None, str | None]:
+    quality = video_quality_from_file_with_retries(video_path)
+    if quality:
+        return quality, "file"
+
+    quality = video_quality_from_info(downloaded_info)
+    if quality:
+        return quality, "downloaded"
+
+    emit(progress, stage="verify", percent=99, message="선택된 영상 품질을 재확인하는 중")
+    quality = video_quality_from_info(fetch_selected_video_info(url, video_quality))
+    if quality:
+        return quality, "selected"
+
+    return None, None
+
+
+def fetch_selected_video_info(url: str, video_quality: str) -> dict[str, Any] | None:
+    YoutubeDL, DownloadError = load_yt_dlp()
+    format_selector, _merge_output_format = video_quality_profile(video_quality)
+    options = {
+        **yt_dlp_base_options(),
+        "format": format_selector,
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "check_formats": "selected",
+        "socket_timeout": 20,
+    }
+    try:
+        with YoutubeDL(options) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except DownloadError:
+        return None
+    return info if isinstance(info, dict) and "entries" not in info else None
 
 
 def video_quality_from_info(info: Any) -> str | None:
@@ -1384,6 +1437,36 @@ def video_quality_from_file(video_path: Path) -> str | None:
                 first_text(stream.get("codec_name")),
             )
     return parse_video_quality_from_ffmpeg_output(ffmpeg_probe_text(video_path) or "")
+
+
+def video_quality_from_file_with_retries(video_path: Path, attempts: int = 3, delay_seconds: float = 0.3) -> str | None:
+    for attempt in range(attempts):
+        quality = video_quality_from_file(video_path)
+        if quality:
+            return quality
+        if attempt + 1 < attempts:
+            time.sleep(delay_seconds)
+    return None
+
+
+def audio_stream_languages_with_retries(video_path: Path, attempts: int = 3, delay_seconds: float = 0.3) -> list[str]:
+    for attempt in range(attempts):
+        languages = audio_stream_languages(video_path)
+        if languages:
+            return languages
+        if attempt + 1 < attempts:
+            time.sleep(delay_seconds)
+    return []
+
+
+def subtitle_stream_languages_with_retries(video_path: Path, attempts: int = 3, delay_seconds: float = 0.3) -> list[str]:
+    for attempt in range(attempts):
+        languages = subtitle_stream_languages(video_path)
+        if languages:
+            return languages
+        if attempt + 1 < attempts:
+            time.sleep(delay_seconds)
+    return []
 
 
 def format_video_quality(width: int | None, height: int | None, fps: str | None, codec: str | None) -> str | None:

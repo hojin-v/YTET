@@ -398,6 +398,7 @@ class MetadataTests(unittest.TestCase):
                     },
                 ),
                 patch("youtube_audio_extractor.extractor.download_video", side_effect=fake_download_video),
+                patch("youtube_audio_extractor.extractor.fetch_selected_video_info", return_value=None),
             ):
                 result = extract_youtube_video(
                     "https://youtu.be/abc123",
@@ -411,6 +412,7 @@ class MetadataTests(unittest.TestCase):
             self.assertEqual([item.name for item in result.subtitle_files], ["Channel Name - A Video.en.srt"])
             self.assertEqual(result.audio_languages, ["en", "ko"])
             self.assertIsNone(result.video_quality)
+            self.assertIsNone(result.video_quality_source)
             self.assertFalse(result.subtitles_embedded)
             self.assertTrue(result.subtitles_requested)
             self.assertTrue(result.multi_audio_requested)
@@ -453,6 +455,7 @@ class MetadataTests(unittest.TestCase):
                 result = extract_youtube_video("https://youtu.be/abc123", output_dir)
 
             self.assertEqual(result.video_quality, "3840x2160, 60fps, vp9")
+            self.assertEqual(result.video_quality_source, "downloaded")
 
     def test_video_extraction_does_not_guess_quality_from_prefetch_metadata(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -478,10 +481,51 @@ class MetadataTests(unittest.TestCase):
                 ),
                 patch("youtube_audio_extractor.extractor.download_video", side_effect=fake_download_video),
                 patch("youtube_audio_extractor.extractor.video_quality_from_file", return_value=None),
+                patch("youtube_audio_extractor.extractor.fetch_selected_video_info", return_value=None),
             ):
                 result = extract_youtube_video("https://youtu.be/abc123", output_dir)
 
             self.assertIsNone(result.video_quality)
+            self.assertIsNone(result.video_quality_source)
+
+    def test_video_extraction_rechecks_selected_format_when_file_probe_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output_dir = Path(temp)
+
+            def fake_download_video(_url, video_dir, _progress, _quality, include_subtitles=False, include_multi_audio=False):
+                video_path = video_dir / "video.mkv"
+                video_path.write_bytes(b"video")
+                return file_record(video_path, "video/x-matroska"), [], [], [], {}
+
+            with (
+                patch(
+                    "youtube_audio_extractor.extractor.fetch_video_info",
+                    return_value={
+                        "id": "abc123",
+                        "title": "A Video",
+                        "channel": "Channel Name",
+                        "width": 1920,
+                        "height": 1080,
+                        "fps": 60,
+                        "vcodec": "vp9",
+                    },
+                ),
+                patch("youtube_audio_extractor.extractor.download_video", side_effect=fake_download_video),
+                patch("youtube_audio_extractor.extractor.video_quality_from_file", return_value=None),
+                patch(
+                    "youtube_audio_extractor.extractor.fetch_selected_video_info",
+                    return_value={
+                        "requested_formats": [
+                            {"vcodec": "vp9", "width": 3840, "height": 2160, "fps": 60},
+                            {"acodec": "opus", "vcodec": "none"},
+                        ]
+                    },
+                ),
+            ):
+                result = extract_youtube_video("https://youtu.be/abc123", output_dir)
+
+            self.assertEqual(result.video_quality, "3840x2160, 60fps, vp9")
+            self.assertEqual(result.video_quality_source, "selected")
 
 
 if __name__ == "__main__":

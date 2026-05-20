@@ -432,6 +432,7 @@ class MainWindow:
             subtitle_files = result.get("subtitle_files") or []
             audio_languages = result.get("audio_languages") or []
             video_quality = result.get("video_quality") or "확인 불가"
+            video_quality = video_quality_with_source(video_quality, result.get("video_quality_source"))
             video_format = video_format_label(video["name"], video.get("mime_type"))
             subtitles_requested = bool(result.get("subtitles_requested"))
             multi_audio_requested = bool(result.get("multi_audio_requested"))
@@ -533,6 +534,16 @@ def video_format_label(name: str, mime_type: str | None = None) -> str:
     if mime_type:
         return mime_type
     return label
+
+
+def video_quality_with_source(quality: str, source: object) -> str:
+    labels = {
+        "file": "파일 확인",
+        "downloaded": "다운로드 포맷",
+        "selected": "선택 포맷 재확인",
+    }
+    label = labels.get(str(source or ""))
+    return f"{quality} · {label}" if label and quality != "확인 불가" else quality
 
 
 def format_file_size(value: Any) -> str:
