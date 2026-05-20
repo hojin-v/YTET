@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to create or update, for example v0.1.0"
+        required: true
+        default: "v0.1.0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Build Windows release
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ inputs.version }}"
+          } elseif ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}"
+          } else {
+            $version = "nightly"
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Build YTET
+        shell: pwsh
+        run: ./scripts/build_windows.ps1 -Version "${{ steps.version.outputs.version }}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YTET-${{ steps.version.outputs.version }}-windows-x64
+          path: |
+            dist/YTET.exe
+            dist/YTET-${{ steps.version.outputs.version }}-windows-x64.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = $env:RELEASE_VERSION
+          $zip = "dist\YTET-$tag-windows-x64.zip"
+          $exe = "dist\YTET.exe"
+
+          if ($tag -eq "nightly") {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -f nightly $env:GITHUB_SHA
+            git push origin refs/tags/nightly --force
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $title = "YTET Nightly"
+            $notes = "Automated nightly build from $env:GITHUB_SHA."
+            $extra = @("--prerelease")
+          } else {
+            $title = "YTET $tag"
+            $notes = "Automated YTET release for $tag."
+            $extra = @()
+          }
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $zip $exe --clobber
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            gh release edit $tag --title $title --notes $notes @extra
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            gh release create $tag $zip $exe --title $title --notes $notes @extra
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
