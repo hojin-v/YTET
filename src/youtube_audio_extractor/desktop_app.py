@@ -24,7 +24,7 @@ def app_root() -> Path:
 PROJECT_ROOT = app_root()
 DEFAULT_OUTPUT_DIR = Path.home() / "Music" / "YTET"
 FORMAT_OPTIONS = [
-    ("M4A/AAC - 기본 추천", "m4a"),
+    ("M4A (AAC) - 기본 추천", "m4a"),
     ("Original Opus - 최고 효율/작은 용량", "original"),
     ("MP3 - 구형 호환", "mp3"),
 ]
@@ -55,35 +55,43 @@ class MainWindow:
         self.result_var = StringVar(value="-")
 
         self.root.title("YTET")
-        self.root.minsize(720, 430)
+        self.root.minsize(820, 560)
         self._build_ui()
         self.root.after(100, self._poll_events)
 
     def _build_ui(self) -> None:
-        frame = ttk.Frame(self.root, padding=24)
+        style = ttk.Style(self.root)
+        style.configure("TLabel", font=("Segoe UI", 10))
+        style.configure("TButton", font=("Segoe UI", 10), padding=(16, 8))
+        style.configure("TEntry", padding=(8, 7))
+        style.configure("TCombobox", padding=(8, 7))
+        style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+        style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(20, 9))
+
+        frame = ttk.Frame(self.root, padding=28)
         frame.grid(row=0, column=0, sticky="nsew")
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         frame.columnconfigure(0, weight=1)
 
-        title = ttk.Label(frame, text="YTET", font=("Segoe UI", 20, "bold"))
+        title = ttk.Label(frame, text="YTET", font=("Segoe UI", 24, "bold"))
         title.grid(row=0, column=0, sticky="w")
 
-        ttk.Label(frame, text="YouTube URL").grid(row=1, column=0, sticky="w", pady=(18, 4))
+        ttk.Label(frame, text="YouTube URL").grid(row=1, column=0, sticky="w", pady=(24, 6))
         self.url_input = ttk.Entry(frame, textvariable=self.url_var)
-        self.url_input.grid(row=2, column=0, sticky="ew")
+        self.url_input.grid(row=2, column=0, sticky="ew", ipady=5)
 
-        ttk.Label(frame, text="저장 폴더").grid(row=3, column=0, sticky="w", pady=(14, 4))
+        ttk.Label(frame, text="저장 폴더").grid(row=3, column=0, sticky="w", pady=(18, 6))
         output_row = ttk.Frame(frame)
         output_row.grid(row=4, column=0, sticky="ew")
         output_row.columnconfigure(0, weight=1)
         self.output_input = ttk.Entry(output_row, textvariable=self.output_var)
-        self.output_input.grid(row=0, column=0, sticky="ew")
+        self.output_input.grid(row=0, column=0, sticky="ew", ipady=5)
         self.browse_button = ttk.Button(output_row, text="폴더 선택", command=self.choose_output_dir)
         self.browse_button.grid(row=0, column=1, padx=(8, 0))
 
         media_row = ttk.Frame(frame)
-        media_row.grid(row=5, column=0, sticky="ew", pady=(16, 0))
+        media_row.grid(row=5, column=0, sticky="ew", pady=(22, 0))
         media_row.columnconfigure(0, weight=1)
         self.media_select = ttk.Combobox(
             media_row,
@@ -91,11 +99,11 @@ class MainWindow:
             values=[label for label, _value in MEDIA_OPTIONS],
             state="readonly",
         )
-        self.media_select.grid(row=0, column=0, sticky="ew")
+        self.media_select.grid(row=0, column=0, sticky="ew", ipady=5)
         self.media_select.bind("<<ComboboxSelected>>", self.on_media_changed)
 
         controls = ttk.Frame(frame)
-        controls.grid(row=6, column=0, sticky="ew", pady=(8, 0))
+        controls.grid(row=6, column=0, sticky="ew", pady=(10, 0))
         controls.columnconfigure(0, weight=1)
         self.format_select = ttk.Combobox(
             controls,
@@ -103,21 +111,21 @@ class MainWindow:
             values=[label for label, _value in FORMAT_OPTIONS],
             state="readonly",
         )
-        self.format_select.grid(row=0, column=0, sticky="ew")
-        self.extract_button = ttk.Button(controls, text="추출", command=self.start_extract)
-        self.extract_button.grid(row=0, column=1, padx=(8, 0))
+        self.format_select.grid(row=0, column=0, sticky="ew", ipady=5)
+        self.extract_button = ttk.Button(controls, text="추출", command=self.start_extract, style="Accent.TButton")
+        self.extract_button.grid(row=0, column=1, padx=(10, 0))
 
         self.progress = ttk.Progressbar(frame, maximum=100, mode="determinate")
-        self.progress.grid(row=7, column=0, sticky="ew", pady=(16, 0))
+        self.progress.grid(row=7, column=0, sticky="ew", pady=(22, 0), ipady=3)
 
-        self.status_label = ttk.Label(frame, textvariable=self.status_var, wraplength=660)
-        self.status_label.grid(row=8, column=0, sticky="ew", pady=(10, 0))
+        self.status_label = ttk.Label(frame, textvariable=self.status_var, wraplength=740)
+        self.status_label.grid(row=8, column=0, sticky="ew", pady=(12, 0))
 
-        result_box = ttk.LabelFrame(frame, text="결과", padding=12)
-        result_box.grid(row=9, column=0, sticky="nsew", pady=(16, 0))
+        result_box = ttk.LabelFrame(frame, text="결과", padding=16)
+        result_box.grid(row=9, column=0, sticky="nsew", pady=(20, 0))
         result_box.columnconfigure(0, weight=1)
         frame.rowconfigure(9, weight=1)
-        self.result_label = ttk.Label(result_box, textvariable=self.result_var, wraplength=650)
+        self.result_label = ttk.Label(result_box, textvariable=self.result_var, wraplength=740)
         self.result_label.grid(row=0, column=0, sticky="nw")
         self.open_folder_button = ttk.Button(
             result_box,
@@ -125,7 +133,7 @@ class MainWindow:
             command=self.open_output_dir,
             state="disabled",
         )
-        self.open_folder_button.grid(row=1, column=0, sticky="w", pady=(10, 0))
+        self.open_folder_button.grid(row=1, column=0, sticky="w", pady=(14, 0))
 
         self.url_input.focus_set()
 
@@ -241,6 +249,7 @@ class MainWindow:
             subtitle_files = result.get("subtitle_files") or []
             audio_languages = result.get("audio_languages") or []
             video_quality = result.get("video_quality") or "자동 선택"
+            video_format = video_format_label(video["name"], video.get("mime_type"))
             subtitle_text = ", ".join(subtitle_languages) if subtitle_languages else "등록 자막 없음"
             subtitle_file_text = ", ".join(item["name"] for item in subtitle_files) if subtitle_files else "없음"
             audio_text = ", ".join(audio_languages) if audio_languages else "기본 오디오"
@@ -248,7 +257,8 @@ class MainWindow:
                 f"파일: {video['name']}",
                 f"제목: {metadata['title']}",
                 f"Channel: {metadata['channel'] or metadata['artist']}",
-                f"화질: {video_quality}",
+                f"형식: {video_format}",
+                f"화질/코덱: {video_quality}",
                 f"오디오: {audio_text}",
                 f"자막: {subtitle_text}",
                 f"자막 파일: {subtitle_file_text}",
@@ -301,6 +311,23 @@ def open_in_file_manager(path: Path) -> None:
         subprocess.Popen(["open", target])
     else:
         subprocess.Popen(["xdg-open", target])
+
+
+def video_format_label(name: str, mime_type: str | None = None) -> str:
+    extension = Path(name).suffix.lower()
+    labels = {
+        ".mkv": "MKV",
+        ".mp4": "MP4",
+        ".webm": "WebM",
+        ".mov": "MOV",
+        ".m4v": "MP4",
+    }
+    label = labels.get(extension, extension.lstrip(".").upper() or "알 수 없음")
+    if extension:
+        return f"{label} ({extension})"
+    if mime_type:
+        return mime_type
+    return label
 
 
 def main() -> int:

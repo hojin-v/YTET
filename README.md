@@ -24,7 +24,7 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 
 | Mode | Best For | Output |
 | --- | --- | --- |
-| Audio | 음악, 강의, 플레이리스트 정리 | `M4A/AAC`, `Original Opus`, `MP3` |
+| Audio | 음악, 강의, 플레이리스트 정리 | `M4A (AAC)`, `Original Opus`, `MP3` |
 | Video | 롱폼, 숏폼, 고화질 보관 | 최고 품질 `MKV` 또는 호환 우선 `MP4` |
 | Subtitles | 한국어/영어 등록 자막 보관 | 영상 내 자막 트랙 + `.srt` |
 | Multi Audio | 다국어 오디오 영상 | 원본 오디오 + 한국어 오디오 트랙 |
@@ -54,7 +54,7 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 
 | Format | When to Use |
 | --- | --- |
-| `M4A/AAC` | Android와 Windows에서 무난하게 재생할 기본 추천 포맷 |
+| `M4A (AAC)` | Android와 Windows에서 무난하게 재생할 기본 추천 포맷 |
 | `Original Opus` | YouTube 원본 오디오에 가깝고 용량 효율이 좋은 포맷 |
 | `MP3` | 오래된 기기나 앱과의 호환성이 필요한 경우 |
 
@@ -80,6 +80,13 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 YouTube의 4K 이상 영상은 보통 H.264 MP4가 아니라 VP9 또는 AV1 같은 고효율 코덱으로 제공됩니다. 그래서 최고 품질 결과는 `.mkv`가 될 수 있습니다.
 
 호환성이 더 중요하면 1080p 이하 옵션을 권장합니다.
+
+추출이 끝나면 앱의 결과 영역에서 최종 형식과 실제 화질/코덱을 확인할 수 있습니다.
+
+```text
+형식: MKV (.mkv)
+화질/코덱: 3840x2160, 30fps, av1
+```
 
 ## Subtitles & Audio Tracks
 
