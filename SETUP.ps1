@@ -9,6 +9,8 @@ $Venv = Join-Path $Project ".venv-win"
 $VenvPython = Join-Path $Venv "Scripts\python.exe"
 $VenvPythonw = Join-Path $Venv "Scripts\pythonw.exe"
 $Log = Join-Path $Project "setup.log"
+$RuntimeDir = Join-Path $Project "runtimes"
+$DenoExe = Join-Path $RuntimeDir "deno.exe"
 
 function Find-Python {
     $candidates = @(
@@ -60,6 +62,24 @@ function New-Shortcut {
     $Shortcut.Save()
 }
 
+function Install-DenoRuntime {
+    if (Test-Path -LiteralPath $DenoExe) {
+        return
+    }
+
+    Write-Host "Installing Deno runtime..."
+    New-Item -ItemType Directory -Path $RuntimeDir -Force | Out-Null
+    $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/denoland/deno/releases/latest"
+    $Asset = $Release.assets | Where-Object { $_.name -eq "deno-x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
+    if (-not $Asset) {
+        throw "Could not find Deno Windows x64 release asset."
+    }
+    $DenoZip = Join-Path $RuntimeDir "deno.zip"
+    Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $DenoZip
+    Expand-Archive -LiteralPath $DenoZip -DestinationPath $RuntimeDir -Force
+    Remove-Item -LiteralPath $DenoZip -Force
+}
+
 try {
     "==== Setup ====" | Set-Content -Path $Log -Encoding UTF8
     Set-Location -LiteralPath $Project
@@ -81,6 +101,8 @@ try {
 
     & $VenvPython -m pip install --no-deps -e . 2>&1 | Tee-Object -FilePath $Log -Append
     if ($LASTEXITCODE -ne 0) { throw "Package installation failed. See log: $Log" }
+
+    Install-DenoRuntime 2>&1 | Tee-Object -FilePath $Log -Append
 
     if (-not $NoShortcut) {
         if (-not (Test-Path -LiteralPath $VenvPythonw)) {

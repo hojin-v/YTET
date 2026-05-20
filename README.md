@@ -51,6 +51,16 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 6. 영상일 경우 `자막 포함`, `다중 오디오 포함`을 필요에 맞게 선택합니다.
 7. `추출`을 누릅니다.
 
+## Source Run
+
+Windows에서 소스 코드를 직접 내려받아 실행할 수도 있습니다. WSL은 필요하지 않습니다.
+
+```powershell
+.\YTET.cmd
+```
+
+처음 실행하면 `SETUP.ps1`이 Python 가상환경, Python 패키지, YouTube JavaScript 처리를 위한 Deno 런타임을 준비합니다.
+
 ## Audio
 
 | Format | When to Use |

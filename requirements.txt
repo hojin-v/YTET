@@ -1,3 +1,4 @@
 imageio-ffmpeg>=0.5.1
 mutagen>=1.47.0
 yt-dlp[default]>=2026.3.17
+yt-dlp-ejs>=0.8.0
