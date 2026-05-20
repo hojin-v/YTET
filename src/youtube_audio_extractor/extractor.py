@@ -603,6 +603,8 @@ def download_audio(
     audio_path = find_downloaded_audio(output_dir)
     if audio_format == "original":
         audio_path = remux_webm_opus_if_needed(audio_path)
+    elif audio_path.suffix.lower() == ".m4a":
+        audio_path = remux_m4a_for_compatibility(audio_path)
     return file_record(audio_path, mime_for_audio(audio_path))
 
 
@@ -1096,6 +1098,30 @@ def remux_webm_opus_if_needed(audio_path: Path) -> Path:
         raise ExtractorError(f"최고음질 Opus remux에 실패했습니다: {completed.stderr.strip()}")
     audio_path.unlink(missing_ok=True)
     return opus_path
+
+
+def remux_m4a_for_compatibility(audio_path: Path) -> Path:
+    ffmpeg_path = require_ffmpeg()
+    temp_path = audio_path.with_name(f"{audio_path.stem}.compat{audio_path.suffix}")
+    command = [
+        ffmpeg_path,
+        "-y",
+        "-i",
+        str(audio_path),
+        "-map",
+        "0",
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        str(temp_path),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    if completed.returncode != 0 or not temp_path.is_file():
+        temp_path.unlink(missing_ok=True)
+        raise ExtractorError(f"M4A 호환성 재포장에 실패했습니다: {completed.stderr.strip()}")
+    temp_path.replace(audio_path)
+    return audio_path
 
 
 def rename_audio_file(audio_path: Path, metadata: TrackMetadata) -> Path:

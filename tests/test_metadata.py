@@ -17,6 +17,7 @@ from youtube_audio_extractor.extractor import (
     parse_audio_stream_count_from_ffmpeg_output,
     parse_video_quality_from_ffmpeg_output,
     pick_cover_url,
+    remux_m4a_for_compatibility,
     lyrics_from_json3,
     lyrics_from_timed_text,
     split_artist_title,
@@ -252,6 +253,35 @@ class MetadataTests(unittest.TestCase):
         self.assertNotIn("bestvideo[height<=720]+bestaudio", options["format"])
         self.assertEqual(options["merge_output_format"], "mp4")
         self.assertEqual(options["check_formats"], "selected")
+
+    def test_remuxes_m4a_without_reencoding_for_player_compatibility(self):
+        with tempfile.TemporaryDirectory() as temp:
+            audio_path = Path(temp) / "audio.m4a"
+            audio_path.write_bytes(b"dash-m4a")
+
+            class Completed:
+                returncode = 0
+                stderr = ""
+
+            def fake_run(command, **_kwargs):
+                self.assertEqual(command[0], "ffmpeg")
+                self.assertIn("-map", command)
+                self.assertIn("0", command)
+                self.assertIn("-c", command)
+                self.assertIn("copy", command)
+                self.assertIn("+faststart", command)
+                Path(command[-1]).write_bytes(b"plain-m4a")
+                return Completed()
+
+            with (
+                patch("youtube_audio_extractor.extractor.require_ffmpeg", return_value="ffmpeg"),
+                patch("youtube_audio_extractor.extractor.subprocess.run", side_effect=fake_run),
+            ):
+                result = remux_m4a_for_compatibility(audio_path)
+
+            self.assertEqual(result, audio_path)
+            self.assertEqual(audio_path.read_bytes(), b"plain-m4a")
+            self.assertFalse((Path(temp) / "audio.compat.m4a").exists())
 
     def test_parses_actual_video_quality_from_ffmpeg_output(self):
         self.assertEqual(
