@@ -16,6 +16,22 @@ Set-Location -LiteralPath $Project
 Remove-Item -LiteralPath "build" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath "dist" -Recurse -Force -ErrorAction SilentlyContinue
 
+$RuntimeDir = Join-Path $Project "build\runtimes"
+$DenoExe = Join-Path $RuntimeDir "deno.exe"
+New-Item -ItemType Directory -Path $RuntimeDir -Force | Out-Null
+
+if (-not (Test-Path -LiteralPath $DenoExe)) {
+    $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/denoland/deno/releases/latest"
+    $Asset = $Release.assets | Where-Object { $_.name -eq "deno-x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
+    if (-not $Asset) {
+        throw "Could not find Deno Windows x64 release asset."
+    }
+    $DenoZip = Join-Path $RuntimeDir "deno.zip"
+    Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $DenoZip
+    Expand-Archive -LiteralPath $DenoZip -DestinationPath $RuntimeDir -Force
+    Remove-Item -LiteralPath $DenoZip -Force
+}
+
 & $Python -m PyInstaller `
     --noconfirm `
     --clean `
@@ -24,7 +40,9 @@ Remove-Item -LiteralPath "dist" -Recurse -Force -ErrorAction SilentlyContinue
     --name YTET `
     --paths src `
     --collect-all imageio_ffmpeg `
+    --collect-all yt_dlp_ejs `
     --collect-submodules yt_dlp `
+    --add-binary "$DenoExe;runtimes" `
     run_app.py
 
 $PackageDir = Join-Path $Project "dist\package"

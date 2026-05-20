@@ -13,6 +13,8 @@ from youtube_audio_extractor.extractor import (
     normalize_audio_format,
     normalize_video_quality,
     parse_subtitle_languages_from_ffmpeg_output,
+    parse_audio_languages_from_ffmpeg_output,
+    parse_audio_stream_count_from_ffmpeg_output,
     parse_video_quality_from_ffmpeg_output,
     pick_cover_url,
     lyrics_from_json3,
@@ -20,6 +22,7 @@ from youtube_audio_extractor.extractor import (
     split_artist_title,
     safe_audio_filename,
     safe_video_filename,
+    select_original_audio_format,
     select_korean_audio_format,
     selected_audio_languages_from_info,
     rename_subtitle_sidecars,
@@ -27,6 +30,7 @@ from youtube_audio_extractor.extractor import (
     video_download_options,
     video_quality_from_info,
     validate_youtube_url,
+    yt_dlp_base_options,
 )
 from youtube_audio_extractor.tagger import EmbedReport
 
@@ -175,10 +179,43 @@ class MetadataTests(unittest.TestCase):
         assert selected is not None
         self.assertEqual(selected["format_id"], "b")
 
+    def test_selects_best_original_audio_format(self):
+        selected = select_original_audio_format(
+            {
+                "formats": [
+                    {"format_id": "a", "vcodec": "none", "acodec": "opus", "ext": "webm", "language": "ko", "abr": 160},
+                    {
+                        "format_id": "b",
+                        "vcodec": "none",
+                        "acodec": "mp4a.40.2",
+                        "ext": "m4a",
+                        "language": "en",
+                        "language_preference": 10,
+                        "abr": 128,
+                    },
+                    {
+                        "format_id": "c",
+                        "vcodec": "none",
+                        "acodec": "mp4a.40.2",
+                        "ext": "m4a",
+                        "language": "en",
+                        "language_preference": 10,
+                        "abr": 64,
+                    },
+                ]
+            }
+        )
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual(selected["format_id"], "b")
+
     def test_video_subtitle_languages_are_limited_to_korean_and_english(self):
         from youtube_audio_extractor.extractor import SUBTITLE_LANGUAGES
 
         self.assertEqual(SUBTITLE_LANGUAGES, ["ko", "ko-KR", "en", "en-US", "en-GB"])
+
+    def test_yt_dlp_disk_cache_is_disabled(self):
+        self.assertFalse(yt_dlp_base_options()["cachedir"])
 
     def test_formats_video_quality_label(self):
         self.assertEqual(
@@ -192,8 +229,19 @@ class MetadataTests(unittest.TestCase):
         with patch("youtube_audio_extractor.extractor.require_ffmpeg", return_value="ffmpeg"):
             options = video_download_options(Path("."), None, "best")
 
-        self.assertEqual(options["format"], "bestvideo+bestaudio/best")
+        self.assertEqual(options["format"], "bestvideo+bestaudio")
         self.assertEqual(options["merge_output_format"], "mkv")
+        self.assertEqual(options["check_formats"], "selected")
+        self.assertNotIn("writesubtitles", options)
+        self.assertEqual(options["postprocessors"], [])
+
+    def test_video_download_can_include_subtitles(self):
+        with patch("youtube_audio_extractor.extractor.require_ffmpeg", return_value="ffmpeg"):
+            options = video_download_options(Path("."), None, "best", include_subtitles=True)
+
+        self.assertTrue(options["writesubtitles"])
+        self.assertEqual(options["subtitleslangs"], ["ko", "ko-KR", "en", "en-US", "en-GB"])
+        self.assertEqual(options["postprocessors"][0]["key"], "FFmpegEmbedSubtitle")
 
     def test_video_download_can_limit_quality_for_smaller_mp4(self):
         with patch("youtube_audio_extractor.extractor.require_ffmpeg", return_value="ffmpeg"):
@@ -201,7 +249,9 @@ class MetadataTests(unittest.TestCase):
 
         self.assertIn("height<=720", options["format"])
         self.assertIn("vcodec^=avc1", options["format"])
+        self.assertNotIn("bestvideo[height<=720]+bestaudio", options["format"])
         self.assertEqual(options["merge_output_format"], "mp4")
+        self.assertEqual(options["check_formats"], "selected")
 
     def test_parses_actual_video_quality_from_ffmpeg_output(self):
         self.assertEqual(
@@ -219,6 +269,14 @@ class MetadataTests(unittest.TestCase):
             ),
             ["en", "ko"],
         )
+
+    def test_parses_audio_languages_from_ffmpeg_output(self):
+        text = (
+            "Stream #0:1[0x2](eng): Audio: opus, 48000 Hz, stereo\n"
+            "Stream #0:2[0x3](kor): Audio: aac, 44100 Hz, stereo\n"
+        )
+        self.assertEqual(parse_audio_languages_from_ffmpeg_output(text), ["en", "ko"])
+        self.assertEqual(parse_audio_stream_count_from_ffmpeg_output(text), 2)
 
     def test_renames_subtitle_sidecars_to_match_video(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -277,7 +335,9 @@ class MetadataTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             output_dir = Path(temp)
 
-            def fake_download_video(_url, video_dir, _progress, _quality):
+            def fake_download_video(_url, video_dir, _progress, _quality, include_subtitles=False, include_multi_audio=False):
+                self.assertTrue(include_subtitles)
+                self.assertTrue(include_multi_audio)
                 video_path = video_dir / "video.mp4"
                 video_path.write_bytes(b"video")
                 subtitle_path = video_dir / "video.en.srt"
@@ -295,7 +355,12 @@ class MetadataTests(unittest.TestCase):
                 ),
                 patch("youtube_audio_extractor.extractor.download_video", side_effect=fake_download_video),
             ):
-                result = extract_youtube_video("https://youtu.be/abc123", output_dir)
+                result = extract_youtube_video(
+                    "https://youtu.be/abc123",
+                    output_dir,
+                    include_subtitles=True,
+                    include_multi_audio=True,
+                )
 
             self.assertEqual(result.video.name, "Channel Name - A Video.mp4")
             self.assertEqual(result.subtitle_languages, ["en"])
@@ -303,6 +368,8 @@ class MetadataTests(unittest.TestCase):
             self.assertEqual(result.audio_languages, ["en", "ko"])
             self.assertIsNone(result.video_quality)
             self.assertFalse(result.subtitles_embedded)
+            self.assertTrue(result.subtitles_requested)
+            self.assertTrue(result.multi_audio_requested)
             self.assertEqual(
                 sorted(path.name for path in output_dir.iterdir()),
                 ["Channel Name - A Video.en.srt", "Channel Name - A Video.mp4"],

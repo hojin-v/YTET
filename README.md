@@ -20,14 +20,14 @@ YouTube URL 하나로 오디오와 영상을 저장하는 Windows용 데스크�
 
 YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니다.
 
-오디오는 커버 이미지와 제목, 아티스트, 원본 URL 같은 메타데이터를 파일 안에 포함합니다. 영상은 기본적으로 YouTube가 제공하는 최고 품질을 선택하고, 필요하면 1080p, 720p, 480p 이하의 낮은 용량 옵션으로 저장할 수 있습니다.
+오디오는 커버 이미지와 제목, 아티스트, 원본 URL 같은 메타데이터를 파일 안에 포함합니다. 영상은 기본적으로 YouTube가 제공하는 최고 품질을 선택하고, 필요하면 1080p, 720p, 480p 이하의 낮은 용량 옵션으로 저장할 수 있습니다. 자막과 다중 오디오는 영상 추출 전에 선택합니다.
 
 | Mode | Best For | Output |
 | --- | --- | --- |
 | Audio | 음악, 강의, 플레이리스트 정리 | `M4A (AAC)`, `Original Opus`, `MP3` |
 | Video | 롱폼, 숏폼, 고화질 보관 | 최고 품질 `MKV` 또는 호환 우선 `MP4` |
-| Subtitles | 한국어/영어 등록 자막 보관 | 영상 내 자막 트랙 + `.srt` |
-| Multi Audio | 다국어 오디오 영상 | 원본 오디오 + 한국어 오디오 트랙 |
+| Subtitles | 선택형 한국어/영어 등록 자막 | 영상 내 자막 트랙 + `.srt` |
+| Multi Audio | 선택형 다국어 오디오 | 원본 오디오 + 한국어 오디오 트랙 |
 
 ## Features
 
@@ -38,17 +38,18 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 | 자동 파일명 | 오디오는 `artist - title`, 영상은 `channel - title` 형식으로 저장합니다. |
 | 4K/8K 지원 | 최고 품질 모드에서 YouTube가 제공하는 고해상도 스트림을 선택합니다. |
 | 저용량 영상 옵션 | 1080p, 720p, 480p 이하 품질로 저장할 수 있습니다. |
-| 자막 처리 | 등록된 한국어/영어 자막을 저장하고 영상에도 삽입합니다. |
-| 다중 오디오 | 한국어 오디오 트랙이 별도로 제공되면 영상에 함께 추가합니다. |
+| 선택형 자막 | `자막 포함` 선택 시 등록된 한국어/영어 자막을 저장하고 영상에도 삽입합니다. |
+| 선택형 다중 오디오 | `다중 오디오 포함` 선택 시 원본/한국어 오디오 트랙을 함께 보관합니다. |
 
 ## Quick Start
 
 1. [Releases](https://github.com/hojin-v/YTET/releases)에서 최신 `YTET.exe` 또는 `YTET-버전-windows-x64.zip`을 받습니다.
 2. `YTET.exe`를 실행합니다.
 3. YouTube URL을 입력합니다.
-4. `음원` 또는 `영상 - 자막/다중 오디오 포함`을 선택합니다.
+4. `음원` 또는 `영상`을 선택합니다.
 5. 저장 폴더와 포맷 또는 품질을 고릅니다.
-6. `추출`을 누릅니다.
+6. 영상일 경우 `자막 포함`, `다중 오디오 포함`을 필요에 맞게 선택합니다.
+7. `추출`을 누릅니다.
 
 ## Audio
 
@@ -70,33 +71,41 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 
 ## Video
 
-| Quality Option | Container | Notes |
+| Quality Option | Container | Tags |
 | --- | --- | --- |
-| 최고 품질 - 4K/8K 가능 | `MKV` 가능 | YouTube가 제공하는 최고 영상 스트림과 최고 오디오 스트림을 저장합니다. |
-| 1080p 이하 | `MP4` 우선 | 화질과 호환성의 균형이 좋습니다. |
-| 720p 이하 | `MP4` 우선 | 용량을 줄이고 싶을 때 적합합니다. |
-| 480p 이하 | `MP4` 우선 | 최소 용량이 중요할 때 사용합니다. |
+| 원본 최고품질 | `MKV` | 4K/8K, AV1/VP9, Opus, 파일 용량 큼 |
+| 1080p MP4 | `MP4` | 호환 우선, H.264/AAC, 4K→1080p |
+| 720p MP4 | `MP4` | 저용량, 모바일 보관, 작은 글자 약함 |
+| 480p MP4 | `MP4` | 최소용량, 확인용, 큰 화면 약함 |
 
 YouTube의 4K 이상 영상은 보통 H.264 MP4가 아니라 VP9 또는 AV1 같은 고효율 코덱으로 제공됩니다. 그래서 최고 품질 결과는 `.mkv`가 될 수 있습니다.
 
-호환성이 더 중요하면 1080p 이하 옵션을 권장합니다.
+호환성이 더 중요하면 1080p 이하 MP4 옵션을 권장합니다.
 
-추출이 끝나면 앱의 결과 영역에서 최종 형식과 실제 화질/코덱을 확인할 수 있습니다.
+추출이 끝나면 앱의 결과 영역에서 최종 형식, 실제 화질/코덱, 저장 용량을 확인할 수 있습니다.
 
 ```text
 형식: MKV (.mkv)
 화질/코덱: 3840x2160, 30fps, av1
+용량: 18.9 MB
 ```
 
 ## Subtitles & Audio Tracks
 
-YTET는 업로더가 등록한 한국어와 영어 자막만 저장합니다.
+영상 모드에서 `자막 포함`을 선택하면 업로더가 등록한 한국어와 영어 자막만 저장합니다.
 
 저장 가능한 자막이 있으면 영상 파일 안에 자막 트랙을 넣고, 플레이어 호환을 위해 같은 이름의 `.srt` 파일도 함께 저장합니다.
 
 자동 생성 자막만 있는 영상은 기본적으로 자막을 저장하지 않습니다.
 
-여러 오디오 언어가 제공되는 영상에서는 원본 오디오를 유지합니다. 원본 오디오가 한국어가 아니고 YouTube가 한국어 오디오 트랙을 제공하면, 한국어 오디오도 함께 추가합니다.
+영상 모드에서 `다중 오디오 포함`을 선택하면 여러 오디오 언어가 제공되는 영상의 원본 오디오를 유지합니다. 원본 오디오가 한국어가 아니고 YouTube가 한국어 오디오 트랙을 제공하면, 한국어 오디오도 함께 추가합니다.
+
+컨테이너별 차이는 다음과 같습니다.
+
+| Container | Tags |
+| --- | --- |
+| `MKV` | 원본 품질, AV1/VP9/Opus, 자막/다중 오디오 |
+| `MP4` | 호환 우선, H.264/AAC, Android/Windows 기본 환경 |
 
 ## Output Rules
 
@@ -119,7 +128,7 @@ flowchart LR
     C -->|Video| G[Select quality profile]
     G --> H[Download video and audio streams]
     H --> I[Merge with FFmpeg]
-    I --> J[Embed subtitles and extra Korean audio if available]
+    I --> J[Optional subtitle and audio track muxing]
     J --> K[Save video and subtitle files]
 ```
 
@@ -129,6 +138,7 @@ flowchart LR
 | --- | --- | --- |
 | App | Python, Tkinter | Lightweight Windows desktop UI |
 | Extraction | yt-dlp | YouTube metadata, stream selection, download orchestration |
+| YouTube Support | yt-dlp-ejs, bundled Deno runtime | YouTube JS challenge handling for full stream access |
 | Media Processing | FFmpeg via imageio-ffmpeg | Audio conversion, video merge, subtitle/audio track muxing |
 | Tagging | mutagen | Audio metadata and cover image embedding |
 | Packaging | PyInstaller | Single-file Windows executable build |

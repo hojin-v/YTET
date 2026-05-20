@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass
@@ -102,6 +103,8 @@ class VideoExtractionResult:
     audio_languages: list[str]
     video_quality: str | None
     subtitles_embedded: bool
+    subtitles_requested: bool
+    multi_audio_requested: bool
     extracted_at: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -133,6 +136,71 @@ def load_yt_dlp() -> Any:
             "yt-dlp가 설치되어 있지 않습니다. `python -m pip install -e .`를 실행하세요."
         ) from exc
     return YoutubeDL, DownloadError
+
+
+def yt_dlp_base_options() -> dict[str, Any]:
+    options: dict[str, Any] = {"cachedir": False}
+    js_runtimes = js_runtime_options()
+    if js_runtimes:
+        options["js_runtimes"] = js_runtimes
+    return options
+
+
+def js_runtime_options() -> dict[str, dict[str, str]]:
+    runtime = find_js_runtime()
+    if not runtime:
+        return {}
+    name, path = runtime
+    return {name: {"path": str(path)}}
+
+
+def find_js_runtime() -> tuple[str, Path] | None:
+    forced = os.environ.get("YTET_JS_RUNTIME")
+    if forced:
+        forced_path = Path(forced)
+        if forced_path.exists():
+            return runtime_name_for_path(forced_path), forced_path
+
+    for name in ["deno", "node", "qjs", "quickjs", "bun"]:
+        for path in runtime_candidates(name):
+            if path.exists():
+                return runtime_name_for_path(path, fallback=name), path
+        system_path = shutil.which(name)
+        if system_path:
+            return runtime_name_for_path(Path(system_path), fallback=name), Path(system_path)
+    return None
+
+
+def runtime_candidates(name: str) -> list[Path]:
+    executable_names = [name]
+    if name == "quickjs":
+        executable_names.append("qjs")
+    if sys.platform.startswith("win"):
+        executable_names = [candidate if candidate.endswith(".exe") else f"{candidate}.exe" for candidate in executable_names]
+
+    roots: list[Path] = []
+    if getattr(sys, "frozen", False):
+        roots.append(Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent)))
+        roots.append(Path(sys.executable).resolve().parent)
+    roots.append(Path(__file__).resolve().parents[2])
+
+    candidates: list[Path] = []
+    for root in roots:
+        for executable_name in executable_names:
+            candidates.append(root / "runtimes" / executable_name)
+            candidates.append(root / executable_name)
+    return candidates
+
+
+def runtime_name_for_path(path: Path, fallback: str | None = None) -> str:
+    stem = path.stem.lower()
+    if stem in {"qjs", "quickjs"}:
+        return "quickjs"
+    if stem in {"deno", "node", "bun"}:
+        return stem
+    if fallback in {"qjs", "quickjs"}:
+        return "quickjs"
+    return fallback or "deno"
 
 
 def normalize_audio_format(value: str | None = None) -> str:
@@ -216,6 +284,8 @@ def extract_youtube_video(
     output_dir: Path,
     progress: ProgressCallback | None = None,
     video_quality: str | None = None,
+    include_subtitles: bool = False,
+    include_multi_audio: bool = False,
 ) -> VideoExtractionResult:
     safe_url = validate_youtube_url(url)
     selected_video_quality = normalize_video_quality(video_quality)
@@ -231,6 +301,8 @@ def extract_youtube_video(
         output_dir,
         progress,
         selected_video_quality,
+        include_subtitles=include_subtitles,
+        include_multi_audio=include_multi_audio,
     )
     video_path = rename_video_file(Path(video_file.path), metadata)
     video_file = file_record(video_path, video_file.mime_type)
@@ -247,6 +319,8 @@ def extract_youtube_video(
         audio_languages=audio_languages,
         video_quality=video_quality_from_file(video_path) or video_quality_from_info(info),
         subtitles_embedded=subtitles_embedded,
+        subtitles_requested=include_subtitles,
+        multi_audio_requested=include_multi_audio,
         extracted_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     )
 
@@ -254,6 +328,7 @@ def extract_youtube_video(
 def fetch_video_info(url: str) -> dict[str, Any]:
     YoutubeDL, DownloadError = load_yt_dlp()
     options = {
+        **yt_dlp_base_options(),
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
@@ -536,9 +611,13 @@ def download_video(
     output_dir: Path,
     progress: ProgressCallback | None = None,
     video_quality: str | None = None,
+    include_subtitles: bool = False,
+    include_multi_audio: bool = False,
 ) -> tuple[ExtractedFile, list[str], list[Path], list[str]]:
     YoutubeDL, DownloadError = load_yt_dlp()
-    options = video_download_options(output_dir, progress, video_quality)
+    if include_subtitles:
+        cleanup_subtitle_sidecars(output_dir)
+    options = video_download_options(output_dir, progress, video_quality, include_subtitles=include_subtitles)
 
     try:
         with YoutubeDL(options) as ydl:
@@ -547,8 +626,10 @@ def download_video(
         raise ExtractorError(f"영상 다운로드에 실패했습니다: {exc}") from exc
 
     video_path = find_downloaded_video(output_dir)
-    audio_languages = ensure_korean_audio_if_available(video_path, info, url, progress)
-    subtitle_paths = collect_subtitle_sidecars(output_dir)
+    audio_languages = audio_stream_languages(video_path) or selected_audio_languages_from_info(info)
+    if include_multi_audio:
+        audio_languages = ensure_korean_audio_if_available(video_path, info, url, progress)
+    subtitle_paths = collect_subtitle_sidecars(output_dir) if include_subtitles else []
     return file_record(video_path, mime_for_video(video_path)), subtitle_languages_from_info(info), subtitle_paths, audio_languages
 
 
@@ -578,6 +659,7 @@ def audio_download_options(
         postprocessors = []
 
     options = {
+        **yt_dlp_base_options(),
         "format": format_selector,
         "outtmpl": {"default": str(output_dir / "audio.%(ext)s")},
         "noplaylist": True,
@@ -600,10 +682,12 @@ def video_download_options(
     output_dir: Path,
     progress: ProgressCallback | None,
     video_quality: str | None = None,
+    include_subtitles: bool = False,
 ) -> dict[str, Any]:
     ffmpeg_location = require_ffmpeg()
     format_selector, merge_output_format = video_quality_profile(video_quality)
-    return {
+    options: dict[str, Any] = {
+        **yt_dlp_base_options(),
         "format": format_selector,
         "outtmpl": {"default": str(output_dir / "video.%(ext)s")},
         "merge_output_format": merge_output_format,
@@ -614,34 +698,41 @@ def video_download_options(
         "continuedl": True,
         "retries": 3,
         "fragment_retries": 3,
+        "check_formats": "selected",
         "windowsfilenames": True,
         "progress_hooks": [make_video_progress_hook(progress)],
         "ffmpeg_location": ffmpeg_location,
-        "writesubtitles": True,
         "writeautomaticsub": False,
-        "subtitleslangs": SUBTITLE_LANGUAGES,
-        "subtitlesformat": "srt/vtt/best",
-        "postprocessors": [
-            {
-                "key": "FFmpegEmbedSubtitle",
-                "already_have_subtitle": True,
-            }
-        ],
+        "postprocessors": [],
     }
+    if include_subtitles:
+        options.update(
+            {
+                "writesubtitles": True,
+                "subtitleslangs": SUBTITLE_LANGUAGES,
+                "subtitlesformat": "srt/vtt/best",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegEmbedSubtitle",
+                        "already_have_subtitle": True,
+                    }
+                ],
+            }
+        )
+    return options
 
 
 def video_quality_profile(video_quality: str | None = None) -> tuple[str, str]:
     quality = normalize_video_quality(video_quality)
     if quality == "best":
-        return "bestvideo+bestaudio/best", "mkv"
+        return "bestvideo+bestaudio", "mkv"
 
     max_height = int(quality)
     format_selector = (
         f"bestvideo[height<={max_height}][vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/"
         f"best[height<={max_height}][vcodec^=avc1][ext=mp4]/"
         f"bestvideo[height<={max_height}][ext=mp4]+bestaudio[ext=m4a]/"
-        f"best[height<={max_height}][ext=mp4]/"
-        f"bestvideo[height<={max_height}]+bestaudio/best[height<={max_height}]/best"
+        f"best[height<={max_height}][ext=mp4]"
     )
     return format_selector, "mp4"
 
@@ -653,28 +744,147 @@ def ensure_korean_audio_if_available(
     progress: ProgressCallback | None = None,
 ) -> list[str]:
     audio_languages = selected_audio_languages_from_info(info)
-    if any(is_korean_language(language) for language in audio_languages):
-        return audio_languages
-
+    original_format = select_original_audio_format(info)
     korean_format = select_korean_audio_format(info)
-    if not korean_format:
-        return audio_languages
 
-    emit(progress, stage="audio", percent=97, message="한국어 오디오 트랙을 추가하는 중")
-    with tempfile.TemporaryDirectory(prefix="youtube-audio-korean-") as temp_dir:
-        korean_audio = download_format_to_temp(url, str(korean_format["format_id"]), Path(temp_dir))
-        mux_extra_audio_track(
-            video_path,
-            korean_audio,
-            language="kor",
-            title="Korean",
-            transcode_to_aac=not is_aac_format(korean_format),
-        )
+    formats_to_add: list[tuple[dict[str, Any], str, str]] = []
+    original_language = audio_format_language(original_format)
+    korean_language = audio_format_language(korean_format)
+
+    if (
+        original_format
+        and audio_languages
+        and original_language
+        and not audio_language_present(audio_languages, original_language)
+    ):
+        formats_to_add.append((original_format, "원본 오디오 트랙을 추가하는 중", "Original"))
+
+    if (
+        korean_format
+        and korean_language
+        and not is_korean_language(original_language)
+        and not audio_language_present(audio_languages, korean_language)
+        and not any(same_audio_format(korean_format, item[0]) for item in formats_to_add)
+    ):
+        formats_to_add.append((korean_format, "한국어 오디오 트랙을 추가하는 중", "Korean"))
 
     languages = list(audio_languages)
-    if not any(is_korean_language(language) for language in languages):
-        languages.append("ko")
-    return languages
+    for audio_format, message, fallback_title in formats_to_add:
+        emit(progress, stage="audio", percent=97, message=message)
+        with tempfile.TemporaryDirectory(prefix="ytet-extra-audio-") as temp_dir:
+            extra_audio = download_format_to_temp(url, audio_download_selector(audio_format), Path(temp_dir))
+            mux_extra_audio_track(
+                video_path,
+                extra_audio,
+                language=ffmpeg_language_tag(audio_format_language(audio_format)),
+                title=audio_track_title(audio_format, fallback_title),
+                transcode_to_aac=should_transcode_extra_audio(video_path, audio_format),
+            )
+
+        language = audio_format_language(audio_format)
+        if language and not audio_language_present(languages, language):
+            languages.append(normalize_media_language(language) or language)
+
+    stream_languages = audio_stream_languages(video_path)
+    return stream_languages if stream_languages and stream_languages != ["und"] else languages
+
+
+def select_original_audio_format(info: Any) -> dict[str, Any] | None:
+    if not isinstance(info, dict):
+        return None
+    formats = info.get("formats")
+    if not isinstance(formats, list):
+        return None
+
+    candidates = [
+        item
+        for item in formats
+        if isinstance(item, dict)
+        and item.get("format_id")
+        and is_audio_only(item)
+        and is_original_audio_format(item)
+    ]
+    if not candidates:
+        return None
+
+    return max(candidates, key=audio_quality_key)
+
+
+def is_original_audio_format(item: dict[str, Any]) -> bool:
+    language_preference = as_int(item.get("language_preference"))
+    note = (first_text(item.get("format_note")) or "").lower()
+    return (language_preference is not None and language_preference >= 10) or "original" in note
+
+
+def audio_language_present(languages: Sequence[str], target_language: str | None) -> bool:
+    if not target_language:
+        return False
+    return any(languages_equivalent(language, target_language) for language in languages)
+
+
+def languages_equivalent(left: str | None, right: str | None) -> bool:
+    left_normalized = normalize_media_language(left)
+    right_normalized = normalize_media_language(right)
+    if not left_normalized or not right_normalized:
+        return False
+    if is_korean_language(left_normalized) and is_korean_language(right_normalized):
+        return True
+    return left_normalized == right_normalized
+
+
+def same_audio_format(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    left_id = first_text(left.get("format_id"))
+    right_id = first_text(right.get("format_id"))
+    if left_id and right_id and left_id == right_id:
+        return languages_equivalent(audio_format_language(left), audio_format_language(right))
+    return False
+
+
+def audio_format_language(item: dict[str, Any] | None) -> str | None:
+    if not isinstance(item, dict):
+        return None
+    return first_text(item.get("language"))
+
+
+def audio_download_selector(item: dict[str, Any]) -> str:
+    language = audio_format_language(item)
+    if language:
+        return f"bestaudio[language={language}]"
+    return first_text(item.get("format_id")) or "bestaudio"
+
+
+def audio_track_title(item: dict[str, Any], fallback: str) -> str:
+    note = first_text(item.get("format_note"))
+    if not note:
+        return fallback
+    return re.sub(r"\s+", " ", note).strip()[:80] or fallback
+
+
+def ffmpeg_language_tag(language: str | None) -> str:
+    normalized = normalize_media_language(language)
+    return {
+        "en": "eng",
+        "ko": "kor",
+    }.get(normalized or "", normalized or "und")
+
+
+def should_transcode_extra_audio(video_path: Path, item: dict[str, Any]) -> bool:
+    if is_aac_format(item):
+        return False
+    return video_path.suffix.lower() in {".mp4", ".m4v", ".mov"}
+
+
+def audio_quality_key(item: dict[str, Any]) -> tuple[int, int, int, int]:
+    extension = first_text(item.get("ext")) or ""
+    codec = first_text(item.get("acodec")) or ""
+    bitrate = as_int(item.get("abr")) or as_int(item.get("tbr")) or 0
+    filesize = as_int(item.get("filesize")) or as_int(item.get("filesize_approx")) or 0
+    return (
+        1 if extension == "m4a" else 0,
+        1 if codec.startswith("mp4a") else 0,
+        bitrate,
+        filesize,
+    )
 
 
 def selected_audio_languages_from_info(info: Any) -> list[str]:
@@ -747,9 +957,37 @@ def is_korean_language(language: str | None) -> bool:
     return normalized == "ko" or normalized.startswith("ko-") or normalized == "kor"
 
 
+def audio_stream_languages(video_path: Path) -> list[str]:
+    data = ffprobe_json(video_path)
+    languages: list[str] = []
+    if data:
+        for stream in data.get("streams", []):
+            if not isinstance(stream, dict) or stream.get("codec_type") != "audio":
+                continue
+            tags = stream.get("tags") if isinstance(stream.get("tags"), dict) else {}
+            language = normalize_media_language(first_text(tags.get("language"), tags.get("handler_name"), "und"))
+            if language and language not in languages:
+                languages.append(language)
+    if languages:
+        return languages
+    return parse_audio_languages_from_ffmpeg_output(ffmpeg_probe_text(video_path) or "")
+
+
+def audio_stream_count(video_path: Path) -> int:
+    data = ffprobe_json(video_path)
+    if data:
+        return sum(
+            1
+            for stream in data.get("streams", [])
+            if isinstance(stream, dict) and stream.get("codec_type") == "audio"
+        )
+    return parse_audio_stream_count_from_ffmpeg_output(ffmpeg_probe_text(video_path) or "")
+
+
 def download_format_to_temp(url: str, format_id: str, output_dir: Path) -> Path:
     YoutubeDL, DownloadError = load_yt_dlp()
     options = {
+        **yt_dlp_base_options(),
         "format": format_id,
         "outtmpl": {"default": str(output_dir / "audio.%(ext)s")},
         "noplaylist": True,
@@ -781,6 +1019,7 @@ def mux_extra_audio_track(
     transcode_to_aac: bool,
 ) -> None:
     ffmpeg_path = require_ffmpeg()
+    new_audio_index = max(1, audio_stream_count(video_path))
     temp_path = video_path.with_name(f"{video_path.stem}.temp-audio{video_path.suffix}")
     command = [
         ffmpeg_path,
@@ -797,12 +1036,12 @@ def mux_extra_audio_track(
         "copy",
     ]
     if transcode_to_aac:
-        command.extend(["-c:a:1", "aac", "-b:a:1", "160k"])
+        command.extend([f"-c:a:{new_audio_index}", "aac", f"-b:a:{new_audio_index}", "160k"])
     command.extend(
         [
-            "-metadata:s:a:1",
+            f"-metadata:s:a:{new_audio_index}",
             f"language={language}",
-            "-metadata:s:a:1",
+            f"-metadata:s:a:{new_audio_index}",
             f"title={title}",
             str(temp_path),
         ]
@@ -967,7 +1206,7 @@ def make_video_progress_hook(progress: ProgressCallback | None) -> Callable[[dic
                 total_bytes=total or None,
             )
         elif status == "finished":
-            emit(progress, stage="video", percent=96, message="영상 파일과 자막을 정리하는 중")
+            emit(progress, stage="video", percent=96, message="영상 파일 정리 중")
 
     return hook
 
@@ -1194,6 +1433,23 @@ def parse_subtitle_languages_from_ffmpeg_output(text: str) -> list[str]:
         if language and language not in languages:
             languages.append(language)
     return languages
+
+
+def parse_audio_languages_from_ffmpeg_output(text: str) -> list[str]:
+    languages: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if "Audio:" not in line:
+            continue
+        match = re.search(r"Stream\s+#\d+:\d+(?:\[[^\]]+\])?(?:\(([^)]+)\))?:\s*Audio:", line)
+        language = normalize_media_language(match.group(1) if match else None) or "und"
+        if language not in languages:
+            languages.append(language)
+    return languages
+
+
+def parse_audio_stream_count_from_ffmpeg_output(text: str) -> int:
+    return sum(1 for line in text.splitlines() if "Audio:" in line)
 
 
 def normalize_media_language(language: str | None) -> str | None:
