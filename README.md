@@ -1,47 +1,64 @@
+<div align="center">
+
 # YTET
 
-YTET는 YouTube URL 하나로 오디오와 영상을 저장할 수 있는 Windows용 추출 도구입니다.
+YouTube Extractor Toolkit
 
-오디오는 커버 이미지와 제목, 아티스트, 원본 URL 같은 메타데이터를 파일 안에 포함해 저장하고, 영상은 가능한 최고 품질 또는 낮은 용량 옵션으로 저장할 수 있습니다.
+YouTube URL 하나로 오디오와 영상을 저장하는 Windows용 데스크톱 추출 도구입니다.
 
-## 주요 기능
+[![CI](https://github.com/hojin-v/YTET/actions/workflows/ci.yml/badge.svg)](https://github.com/hojin-v/YTET/actions/workflows/ci.yml)
+[![Release](https://github.com/hojin-v/YTET/actions/workflows/release.yml/badge.svg)](https://github.com/hojin-v/YTET/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/hojin-v/YTET?label=release)](https://github.com/hojin-v/YTET/releases)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D4)
+![Python](https://img.shields.io/badge/python-3.10%2B-3776AB)
 
-- YouTube URL 기반 오디오 추출
-- YouTube 롱폼/숏폼 영상 저장
-- 오디오 파일에 커버 이미지와 메타데이터 포함
-- `artist - title` 형식의 오디오 파일명 자동 생성
-- `channel - title` 형식의 영상 파일명 자동 생성
-- 최고 품질 영상 저장 지원
-- 1080p, 720p, 480p 이하 저용량 영상 저장 옵션
-- 등록된 한국어/영어 자막 저장 및 영상 파일 내 자막 트랙 삽입
-- 여러 오디오 언어가 제공되는 영상에서 한국어 오디오 트랙 추가 지원
+[Download](https://github.com/hojin-v/YTET/releases) · [Features](#features) · [Tech Stack](#tech-stack) · [Caution](#caution)
 
-## 다운로드
+</div>
 
-최신 버전은 GitHub Releases에서 받을 수 있습니다.
+## Overview
 
-https://github.com/hojin-v/YTET/releases
+YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니다.
 
-Windows에서는 `YTET.exe` 또는 `YTET-버전-windows-x64.zip` 파일을 내려받아 실행하면 됩니다.
+오디오는 커버 이미지와 제목, 아티스트, 원본 URL 같은 메타데이터를 파일 안에 포함합니다. 영상은 기본적으로 YouTube가 제공하는 최고 품질을 선택하고, 필요하면 1080p, 720p, 480p 이하의 낮은 용량 옵션으로 저장할 수 있습니다.
 
-## 사용법
+| Mode | Best For | Output |
+| --- | --- | --- |
+| Audio | 음악, 강의, 플레이리스트 정리 | `M4A/AAC`, `Original Opus`, `MP3` |
+| Video | 롱폼, 숏폼, 고화질 보관 | 최고 품질 `MKV` 또는 호환 우선 `MP4` |
+| Subtitles | 한국어/영어 등록 자막 보관 | 영상 내 자막 트랙 + `.srt` |
+| Multi Audio | 다국어 오디오 영상 | 원본 오디오 + 한국어 오디오 트랙 |
 
-1. `YTET.exe`를 실행합니다.
-2. YouTube URL을 입력합니다.
-3. `음원` 또는 `영상 - 자막/다중 오디오 포함`을 선택합니다.
-4. 저장 폴더를 선택합니다.
-5. 원하는 포맷 또는 품질을 선택합니다.
+## Features
+
+| Feature | Description |
+| --- | --- |
+| URL 기반 추출 | YouTube URL을 넣고 저장 폴더를 고르면 추출을 시작합니다. |
+| 오디오 메타데이터 | 제목, 아티스트, 원본 URL, 커버 이미지를 가능한 범위에서 파일에 기록합니다. |
+| 자동 파일명 | 오디오는 `artist - title`, 영상은 `channel - title` 형식으로 저장합니다. |
+| 4K/8K 지원 | 최고 품질 모드에서 YouTube가 제공하는 고해상도 스트림을 선택합니다. |
+| 저용량 영상 옵션 | 1080p, 720p, 480p 이하 품질로 저장할 수 있습니다. |
+| 자막 처리 | 등록된 한국어/영어 자막을 저장하고 영상에도 삽입합니다. |
+| 다중 오디오 | 한국어 오디오 트랙이 별도로 제공되면 영상에 함께 추가합니다. |
+
+## Quick Start
+
+1. [Releases](https://github.com/hojin-v/YTET/releases)에서 최신 `YTET.exe` 또는 `YTET-버전-windows-x64.zip`을 받습니다.
+2. `YTET.exe`를 실행합니다.
+3. YouTube URL을 입력합니다.
+4. `음원` 또는 `영상 - 자막/다중 오디오 포함`을 선택합니다.
+5. 저장 폴더와 포맷 또는 품질을 고릅니다.
 6. `추출`을 누릅니다.
 
-## 오디오 저장
+## Audio
 
-지원 포맷:
+| Format | When to Use |
+| --- | --- |
+| `M4A/AAC` | Android와 Windows에서 무난하게 재생할 기본 추천 포맷 |
+| `Original Opus` | YouTube 원본 오디오에 가깝고 용량 효율이 좋은 포맷 |
+| `MP3` | 오래된 기기나 앱과의 호환성이 필요한 경우 |
 
-- `M4A/AAC`: Android와 Windows에서 무난하게 사용할 수 있는 기본 추천 포맷
-- `Original Opus`: YouTube 원본 오디오에 가깝고 용량 효율이 좋은 포맷
-- `MP3`: 오래된 기기나 앱과의 호환성을 위한 포맷
-
-오디오 파일에는 가능한 경우 다음 정보가 포함됩니다.
+오디오 추출 결과에는 가능한 경우 다음 정보가 포함됩니다.
 
 - 제목
 - 아티스트
@@ -49,22 +66,22 @@ Windows에서는 `YTET.exe` 또는 `YTET-버전-windows-x64.zip` 파일을 내�
 - 커버 이미지
 - 가사 또는 자막 기반 텍스트 정보
 
-오디오 추출 시 별도의 커버 이미지 파일이나 메타데이터 파일은 저장하지 않습니다.
+오디오 추출 시 별도의 커버 이미지 파일이나 메타데이터 파일은 남기지 않습니다.
 
-## 영상 저장
+## Video
 
-지원 품질:
+| Quality Option | Container | Notes |
+| --- | --- | --- |
+| 최고 품질 - 4K/8K 가능 | `MKV` 가능 | YouTube가 제공하는 최고 영상 스트림과 최고 오디오 스트림을 저장합니다. |
+| 1080p 이하 | `MP4` 우선 | 화질과 호환성의 균형이 좋습니다. |
+| 720p 이하 | `MP4` 우선 | 용량을 줄이고 싶을 때 적합합니다. |
+| 480p 이하 | `MP4` 우선 | 최소 용량이 중요할 때 사용합니다. |
 
-- `최고 품질 - 4K/8K 가능, MKV 가능`
-- `1080p 이하 - MP4 호환/균형`
-- `720p 이하 - MP4 저용량`
-- `480p 이하 - MP4 최소 용량`
+YouTube의 4K 이상 영상은 보통 H.264 MP4가 아니라 VP9 또는 AV1 같은 고효율 코덱으로 제공됩니다. 그래서 최고 품질 결과는 `.mkv`가 될 수 있습니다.
 
-기본값은 최고 품질입니다. YouTube가 4K 이상의 영상을 VP9 또는 AV1 같은 고효율 코덱으로 제공하는 경우, 저장 결과가 `.mkv` 파일이 될 수 있습니다.
+호환성이 더 중요하면 1080p 이하 옵션을 권장합니다.
 
-호환성이 더 중요하면 1080p 이하 옵션을 권장합니다. 이 옵션은 가능한 경우 Windows와 Android에서 열기 쉬운 MP4 형식으로 저장합니다.
-
-## 자막과 오디오 언어
+## Subtitles & Audio Tracks
 
 YTET는 업로더가 등록한 한국어와 영어 자막만 저장합니다.
 
@@ -74,28 +91,60 @@ YTET는 업로더가 등록한 한국어와 영어 자막만 저장합니다.
 
 여러 오디오 언어가 제공되는 영상에서는 원본 오디오를 유지합니다. 원본 오디오가 한국어가 아니고 YouTube가 한국어 오디오 트랙을 제공하면, 한국어 오디오도 함께 추가합니다.
 
-## 저장 결과
-
-오디오 파일명:
+## Output Rules
 
 ```text
-artist - title.ext
+audio:    artist - title.ext
+video:    channel - title.ext
+subtitle: channel - title.ko.srt
+subtitle: channel - title.en.srt
 ```
 
-영상 파일명:
+## How It Works
 
-```text
-channel - title.ext
+```mermaid
+flowchart LR
+    A[YouTube URL] --> B[yt-dlp metadata lookup]
+    B --> C{Mode}
+    C -->|Audio| D[Download best audio]
+    D --> E[Embed metadata and cover]
+    E --> F[Save audio file]
+    C -->|Video| G[Select quality profile]
+    G --> H[Download video and audio streams]
+    H --> I[Merge with FFmpeg]
+    I --> J[Embed subtitles and extra Korean audio if available]
+    J --> K[Save video and subtitle files]
 ```
 
-영상 자막 파일명:
+## Tech Stack
 
-```text
-channel - title.ko.srt
-channel - title.en.srt
+| Layer | Technology | Role |
+| --- | --- | --- |
+| App | Python, Tkinter | Lightweight Windows desktop UI |
+| Extraction | yt-dlp | YouTube metadata, stream selection, download orchestration |
+| Media Processing | FFmpeg via imageio-ffmpeg | Audio conversion, video merge, subtitle/audio track muxing |
+| Tagging | mutagen | Audio metadata and cover image embedding |
+| Packaging | PyInstaller | Single-file Windows executable build |
+| Automation | GitHub Actions | CI, Windows build, release publishing |
+
+## Release Pipeline
+
+```mermaid
+flowchart TD
+    A[Push to main] --> B[CI]
+    B --> C[Windows build]
+    C --> D[Nightly prerelease]
+    E[Push v* tag] --> F[CI]
+    F --> G[Windows build]
+    G --> H[Versioned GitHub Release]
 ```
 
-## 주의사항
+Every release build uploads:
+
+- `YTET.exe`
+- `YTET-버전-windows-x64.zip`
+
+## Caution
 
 - 권한이 있는 콘텐츠에만 사용하세요.
 - YouTube 서비스 약관과 지역 법규를 확인해야 합니다.
