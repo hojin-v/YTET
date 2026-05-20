@@ -58,6 +58,7 @@ class MainWindow:
         self.worker: threading.Thread | None = None
         self.last_output_dir = DEFAULT_OUTPUT_DIR
         self.media_buttons: list[ttk.Radiobutton] = []
+        self.video_option_buttons: list[ttk.Checkbutton] = []
 
         self.url_var = StringVar()
         self.output_var = StringVar(value=str(DEFAULT_OUTPUT_DIR))
@@ -70,18 +71,20 @@ class MainWindow:
         self.result_var = StringVar(value="-")
 
         self.root.title("YTET")
-        self.root.minsize(860, 650)
+        self.root.minsize(880, 700)
         self._build_ui()
         self.root.after(100, self._poll_events)
 
     def _build_ui(self) -> None:
         style = ttk.Style(self.root)
         style.configure("TLabel", font=("Segoe UI", 10))
+        style.configure("Section.TLabel", font=("Segoe UI", 10, "bold"))
         style.configure("TButton", font=("Segoe UI", 10), padding=(16, 8))
         style.configure("TEntry", padding=(8, 7))
         style.configure("TCombobox", padding=(8, 7))
         style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
         style.configure("Mode.Toolbutton", font=("Segoe UI", 11, "bold"), padding=(22, 12))
+        style.configure("Option.Toolbutton", font=("Segoe UI", 10, "bold"), padding=(18, 12))
         style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(20, 9))
 
         frame = ttk.Frame(self.root, padding=28)
@@ -90,14 +93,14 @@ class MainWindow:
         self.root.rowconfigure(0, weight=1)
         frame.columnconfigure(0, weight=1)
 
-        title = ttk.Label(frame, text="YTET", font=("Segoe UI", 24, "bold"))
+        title = ttk.Label(frame, text="YTET", font=("Segoe UI", 26, "bold"))
         title.grid(row=0, column=0, sticky="w")
 
-        ttk.Label(frame, text="YouTube URL").grid(row=1, column=0, sticky="w", pady=(24, 6))
+        ttk.Label(frame, text="YouTube URL", style="Section.TLabel").grid(row=1, column=0, sticky="w", pady=(24, 6))
         self.url_input = ttk.Entry(frame, textvariable=self.url_var)
         self.url_input.grid(row=2, column=0, sticky="ew", ipady=5)
 
-        ttk.Label(frame, text="저장 폴더").grid(row=3, column=0, sticky="w", pady=(18, 6))
+        ttk.Label(frame, text="저장 폴더", style="Section.TLabel").grid(row=3, column=0, sticky="w", pady=(18, 6))
         output_row = ttk.Frame(frame)
         output_row.grid(row=4, column=0, sticky="ew")
         output_row.columnconfigure(0, weight=1)
@@ -106,7 +109,7 @@ class MainWindow:
         self.browse_button = ttk.Button(output_row, text="폴더 선택", command=self.choose_output_dir)
         self.browse_button.grid(row=0, column=1, padx=(8, 0))
 
-        ttk.Label(frame, text="추출 유형").grid(row=5, column=0, sticky="w", pady=(22, 6))
+        ttk.Label(frame, text="추출 유형", style="Section.TLabel").grid(row=5, column=0, sticky="w", pady=(22, 6))
         media_row = ttk.Frame(frame)
         media_row.grid(row=6, column=0, sticky="ew")
         media_row.columnconfigure(0, weight=1)
@@ -124,8 +127,9 @@ class MainWindow:
             button.grid(row=0, column=index, sticky="ew", padx=(0, 8) if index == 0 else (8, 0), ipady=3)
             self.media_buttons.append(button)
 
+        ttk.Label(frame, text="포맷 / 품질", style="Section.TLabel").grid(row=7, column=0, sticky="w", pady=(18, 6))
         controls = ttk.Frame(frame)
-        controls.grid(row=7, column=0, sticky="ew", pady=(14, 0))
+        controls.grid(row=8, column=0, sticky="ew")
         controls.columnconfigure(0, weight=1)
         self.format_select = ttk.Combobox(
             controls,
@@ -139,19 +143,25 @@ class MainWindow:
         self.extract_button.grid(row=0, column=1, padx=(10, 0))
 
         self.video_options_frame = ttk.Frame(frame)
-        self.video_options_frame.grid(row=8, column=0, sticky="w", pady=(12, 0))
+        self.video_options_frame.grid(row=9, column=0, sticky="ew", pady=(12, 0))
+        self.video_options_frame.columnconfigure(0, weight=1)
+        self.video_options_frame.columnconfigure(1, weight=1)
+        self.video_option_buttons = []
         self.subtitle_check = ttk.Checkbutton(
             self.video_options_frame,
-            text="자막 포함",
+            text="자막 포함\n한글·영어",
             variable=self.include_subtitles_var,
+            style="Option.Toolbutton",
         )
-        self.subtitle_check.grid(row=0, column=0, sticky="w")
+        self.subtitle_check.grid(row=0, column=0, sticky="ew", padx=(0, 8), ipady=3)
         self.multi_audio_check = ttk.Checkbutton(
             self.video_options_frame,
-            text="다중 오디오 포함",
+            text="다중 오디오\n원본·한국어",
             variable=self.include_multi_audio_var,
+            style="Option.Toolbutton",
         )
-        self.multi_audio_check.grid(row=0, column=1, sticky="w", padx=(18, 0))
+        self.multi_audio_check.grid(row=0, column=1, sticky="ew", padx=(8, 0), ipady=3)
+        self.video_option_buttons.extend([self.subtitle_check, self.multi_audio_check])
 
         self.selection_help_label = ttk.Label(
             frame,
@@ -159,18 +169,18 @@ class MainWindow:
             wraplength=780,
             justify="left",
         )
-        self.selection_help_label.grid(row=9, column=0, sticky="ew", pady=(10, 0))
+        self.selection_help_label.grid(row=10, column=0, sticky="ew", pady=(10, 0))
 
         self.progress = ttk.Progressbar(frame, maximum=100, mode="determinate")
-        self.progress.grid(row=10, column=0, sticky="ew", pady=(22, 0), ipady=3)
+        self.progress.grid(row=11, column=0, sticky="ew", pady=(22, 0), ipady=3)
 
         self.status_label = ttk.Label(frame, textvariable=self.status_var, wraplength=740)
-        self.status_label.grid(row=11, column=0, sticky="ew", pady=(12, 0))
+        self.status_label.grid(row=12, column=0, sticky="ew", pady=(12, 0))
 
         result_box = ttk.LabelFrame(frame, text="결과", padding=16)
-        result_box.grid(row=12, column=0, sticky="nsew", pady=(20, 0))
+        result_box.grid(row=13, column=0, sticky="nsew", pady=(20, 0))
         result_box.columnconfigure(0, weight=1)
-        frame.rowconfigure(12, weight=1)
+        frame.rowconfigure(13, weight=1)
         self.result_label = ttk.Label(result_box, textvariable=self.result_var, wraplength=740)
         self.result_label.grid(row=0, column=0, sticky="nw")
         self.open_folder_button = ttk.Button(
@@ -382,8 +392,8 @@ class MainWindow:
         self.browse_button.configure(state=state)
         for button in self.media_buttons:
             button.configure(state=state)
-        self.subtitle_check.configure(state=state)
-        self.multi_audio_check.configure(state=state)
+        for button in self.video_option_buttons:
+            button.configure(state=state)
         if busy:
             self.format_select.configure(state="disabled")
         else:
