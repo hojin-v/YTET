@@ -76,12 +76,13 @@ class MainWindow:
         self.root.after(100, self._poll_events)
 
     def _build_ui(self) -> None:
+        self.root.option_add("*TCombobox*Listbox.font", "Segoe UI 12")
         style = ttk.Style(self.root)
         style.configure("TLabel", font=("Segoe UI", 10))
         style.configure("Section.TLabel", font=("Segoe UI", 10, "bold"))
         style.configure("TButton", font=("Segoe UI", 10), padding=(16, 8))
         style.configure("TEntry", padding=(8, 7))
-        style.configure("TCombobox", padding=(8, 7))
+        style.configure("TCombobox", font=("Segoe UI", 11), padding=(10, 9))
         style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
         style.configure("Mode.Toolbutton", font=("Segoe UI", 10, "bold"), padding=(18, 9), relief="raised", borderwidth=1)
         style.map("Mode.Toolbutton", relief=[("selected", "sunken"), ("pressed", "sunken"), ("!selected", "raised")])
@@ -159,8 +160,9 @@ class MainWindow:
             textvariable=self.format_var,
             values=[label for label, _value in FORMAT_OPTIONS],
             state="readonly",
+            height=len(FORMAT_OPTIONS),
         )
-        self.format_select.grid(row=0, column=0, sticky="ew", ipady=5)
+        self.format_select.grid(row=0, column=0, sticky="ew", ipady=7)
         self.format_select.bind("<<ComboboxSelected>>", self.on_format_changed)
         self.extract_button = ttk.Button(controls, text="추출", command=self.start_extract, style="Accent.TButton")
         self.extract_button.grid(row=0, column=1, padx=(10, 0))
@@ -199,10 +201,18 @@ class MainWindow:
 
     def on_media_changed(self, _event: object | None = None) -> None:
         if self.selected_media() == "video":
-            self.format_select.configure(values=[label for label, _value in VIDEO_QUALITY_OPTIONS], state="readonly")
+            self.format_select.configure(
+                values=[label for label, _value in VIDEO_QUALITY_OPTIONS],
+                state="readonly",
+                height=len(VIDEO_QUALITY_OPTIONS),
+            )
             self.format_var.set(VIDEO_QUALITY_OPTIONS[0][0])
         else:
-            self.format_select.configure(values=[label for label, _value in FORMAT_OPTIONS], state="readonly")
+            self.format_select.configure(
+                values=[label for label, _value in FORMAT_OPTIONS],
+                state="readonly",
+                height=len(FORMAT_OPTIONS),
+            )
             self.format_var.set(FORMAT_OPTIONS[0][0])
         self.update_video_option_visibility()
         self.update_selection_help()
