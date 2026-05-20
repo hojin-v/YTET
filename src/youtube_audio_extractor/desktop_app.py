@@ -431,16 +431,16 @@ class MainWindow:
             subtitle_languages = result.get("subtitle_languages") or []
             subtitle_files = result.get("subtitle_files") or []
             audio_languages = result.get("audio_languages") or []
-            video_quality = result.get("video_quality") or "자동 선택"
+            video_quality = result.get("video_quality") or "확인 불가"
             video_format = video_format_label(video["name"], video.get("mime_type"))
             subtitles_requested = bool(result.get("subtitles_requested"))
             multi_audio_requested = bool(result.get("multi_audio_requested"))
-            subtitle_text = ", ".join(subtitle_languages) if subtitle_languages else "등록 자막 없음"
+            subtitle_text = ", ".join(subtitle_languages) if subtitle_languages else "추출된 자막 없음"
             subtitle_file_text = ", ".join(item["name"] for item in subtitle_files) if subtitle_files else "없음"
             if not subtitles_requested:
                 subtitle_text = "선택 안 함"
                 subtitle_file_text = "선택 안 함"
-            audio_text = ", ".join(audio_languages) if audio_languages else "기본 오디오"
+            audio_text = ", ".join(audio_languages) if audio_languages else "확인 불가"
             if not multi_audio_requested:
                 audio_text = "기본 오디오"
             lines = [

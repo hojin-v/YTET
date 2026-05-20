@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from youtube_audio_extractor.extractor import (
     ExtractorError,
+    audio_stream_languages,
     extract_youtube,
     extract_youtube_video,
     build_track_metadata,
@@ -27,6 +28,7 @@ from youtube_audio_extractor.extractor import (
     select_korean_audio_format,
     selected_audio_languages_from_info,
     rename_subtitle_sidecars,
+    subtitle_stream_languages,
     subtitle_languages_from_info,
     video_download_options,
     video_quality_from_info,
@@ -225,6 +227,7 @@ class MetadataTests(unittest.TestCase):
             ),
             "1920x1080, 30fps, avc1.640028",
         )
+        self.assertIsNone(video_quality_from_info({"vcodec": "vp9", "width": 1920, "height": 1080, "fps": 60}))
 
     def test_video_download_defaults_to_highest_quality_mkv(self):
         with patch("youtube_audio_extractor.extractor.require_ffmpeg", return_value="ffmpeg"):
@@ -307,6 +310,17 @@ class MetadataTests(unittest.TestCase):
         )
         self.assertEqual(parse_audio_languages_from_ffmpeg_output(text), ["en", "ko"])
         self.assertEqual(parse_audio_stream_count_from_ffmpeg_output(text), 2)
+
+    def test_stream_language_probe_does_not_treat_handler_name_as_language(self):
+        probe = {
+            "streams": [
+                {"codec_type": "audio", "tags": {"handler_name": "ISO Media file produced by Google Inc."}},
+                {"codec_type": "subtitle", "tags": {"handler_name": "SubtitleHandler"}},
+            ]
+        }
+        with patch("youtube_audio_extractor.extractor.ffprobe_json", return_value=probe):
+            self.assertEqual(audio_stream_languages(Path("video.mkv")), ["und"])
+            self.assertEqual(subtitle_stream_languages(Path("video.mkv")), ["und"])
 
     def test_renames_subtitle_sidecars_to_match_video(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -439,6 +453,35 @@ class MetadataTests(unittest.TestCase):
                 result = extract_youtube_video("https://youtu.be/abc123", output_dir)
 
             self.assertEqual(result.video_quality, "3840x2160, 60fps, vp9")
+
+    def test_video_extraction_does_not_guess_quality_from_prefetch_metadata(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output_dir = Path(temp)
+
+            def fake_download_video(_url, video_dir, _progress, _quality, include_subtitles=False, include_multi_audio=False):
+                video_path = video_dir / "video.mkv"
+                video_path.write_bytes(b"video")
+                return file_record(video_path, "video/x-matroska"), [], [], [], {}
+
+            with (
+                patch(
+                    "youtube_audio_extractor.extractor.fetch_video_info",
+                    return_value={
+                        "id": "abc123",
+                        "title": "A Video",
+                        "channel": "Channel Name",
+                        "width": 1920,
+                        "height": 1080,
+                        "fps": 60,
+                        "vcodec": "vp9",
+                    },
+                ),
+                patch("youtube_audio_extractor.extractor.download_video", side_effect=fake_download_video),
+                patch("youtube_audio_extractor.extractor.video_quality_from_file", return_value=None),
+            ):
+                result = extract_youtube_video("https://youtu.be/abc123", output_dir)
+
+            self.assertIsNone(result.video_quality)
 
 
 if __name__ == "__main__":

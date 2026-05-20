@@ -317,7 +317,7 @@ def extract_youtube_video(
         subtitle_languages=subtitle_languages,
         subtitle_files=subtitle_files,
         audio_languages=audio_languages,
-        video_quality=video_quality_from_file(video_path) or video_quality_from_info(downloaded_info) or video_quality_from_info(info),
+        video_quality=video_quality_from_file(video_path) or video_quality_from_info(downloaded_info),
         subtitles_embedded=subtitles_embedded,
         subtitles_requested=include_subtitles,
         multi_audio_requested=include_multi_audio,
@@ -628,9 +628,9 @@ def download_video(
         raise ExtractorError(f"영상 다운로드에 실패했습니다: {exc}") from exc
 
     video_path = find_downloaded_video(output_dir)
-    audio_languages = audio_stream_languages(video_path) or selected_audio_languages_from_info(info)
     if include_multi_audio:
-        audio_languages = ensure_korean_audio_if_available(video_path, info, url, progress)
+        ensure_korean_audio_if_available(video_path, info, url, progress)
+    audio_languages = audio_stream_languages(video_path)
     subtitle_paths = collect_subtitle_sidecars(output_dir) if include_subtitles else []
     return file_record(video_path, mime_for_video(video_path)), subtitle_languages_from_info(info), subtitle_paths, audio_languages, info
 
@@ -744,8 +744,10 @@ def ensure_korean_audio_if_available(
     info: Any,
     url: str,
     progress: ProgressCallback | None = None,
-) -> list[str]:
-    audio_languages = selected_audio_languages_from_info(info)
+) -> None:
+    audio_languages = audio_stream_languages(video_path)
+    if not audio_languages or audio_languages == ["und"]:
+        audio_languages = selected_audio_languages_from_info(info)
     original_format = select_original_audio_format(info)
     korean_format = select_korean_audio_format(info)
 
@@ -786,9 +788,6 @@ def ensure_korean_audio_if_available(
         language = audio_format_language(audio_format)
         if language and not audio_language_present(languages, language):
             languages.append(normalize_media_language(language) or language)
-
-    stream_languages = audio_stream_languages(video_path)
-    return stream_languages if stream_languages and stream_languages != ["und"] else languages
 
 
 def select_original_audio_format(info: Any) -> dict[str, Any] | None:
@@ -967,7 +966,7 @@ def audio_stream_languages(video_path: Path) -> list[str]:
             if not isinstance(stream, dict) or stream.get("codec_type") != "audio":
                 continue
             tags = stream.get("tags") if isinstance(stream.get("tags"), dict) else {}
-            language = normalize_media_language(first_text(tags.get("language"), tags.get("handler_name"), "und"))
+            language = normalize_media_language(first_text(tags.get("language"))) or "und"
             if language and language not in languages:
                 languages.append(language)
     if languages:
@@ -1338,7 +1337,7 @@ def subtitle_stream_languages(video_path: Path) -> list[str]:
             if not isinstance(stream, dict) or stream.get("codec_type") != "subtitle":
                 continue
             tags = stream.get("tags") if isinstance(stream.get("tags"), dict) else {}
-            language = normalize_media_language(first_text(tags.get("language"), tags.get("handler_name"), "und"))
+            language = normalize_media_language(first_text(tags.get("language"))) or "und"
             if language and language not in languages:
                 languages.append(language)
     if languages:
@@ -1355,7 +1354,7 @@ def video_quality_from_info(info: Any) -> str | None:
     if isinstance(formats, list):
         video_format = next((item for item in formats if isinstance(item, dict) and first_text(item.get("vcodec"), "none") != "none"), None)
     if not isinstance(video_format, dict):
-        video_format = info
+        return None
     height = as_int(video_format.get("height"))
     width = as_int(video_format.get("width"))
     fps = as_int(video_format.get("fps"))
