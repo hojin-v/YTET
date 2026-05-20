@@ -7,7 +7,7 @@ import sys
 import threading
 import traceback
 from pathlib import Path
-from tkinter import BooleanVar, Button, TclError, Tk, filedialog, messagebox
+from tkinter import BooleanVar, Button, TclError, Text, Tk, filedialog, messagebox
 from tkinter import StringVar
 from tkinter import ttk
 from typing import Any
@@ -82,7 +82,6 @@ class MainWindow:
         self.include_multi_audio_var = BooleanVar(value=False)
         self.selection_help_var = StringVar()
         self.status_var = StringVar(value="URL과 저장 폴더를 입력한 뒤 추출을 누르세요.")
-        self.result_var = StringVar(value="-")
 
         self.root.title("YTET")
         self.root.minsize(860, 640)
@@ -217,9 +216,24 @@ class MainWindow:
         result_box = ttk.LabelFrame(frame, text="결과", padding=16)
         result_box.grid(row=11, column=0, sticky="nsew", pady=(16, 0))
         result_box.columnconfigure(0, weight=1)
+        result_box.rowconfigure(0, weight=1)
         frame.rowconfigure(11, weight=1)
-        self.result_label = ttk.Label(result_box, textvariable=self.result_var, wraplength=740)
-        self.result_label.grid(row=0, column=0, sticky="nw")
+        self.result_text = Text(
+            result_box,
+            height=8,
+            wrap="word",
+            borderwidth=1,
+            relief="solid",
+            padx=10,
+            pady=8,
+            font=("Segoe UI", 10),
+            foreground="#111827",
+            background="#ffffff",
+            insertwidth=0,
+        )
+        self.result_text.grid(row=0, column=0, sticky="nsew")
+        self.result_text.bind("<Control-a>", self.select_all_result_text)
+        self.set_result_text("-")
         self.open_folder_button = ttk.Button(
             result_box,
             text="저장 폴더 열기",
@@ -322,7 +336,7 @@ class MainWindow:
         self.set_busy(True)
         self.progress.configure(value=0)
         self.status_var.set("작업을 준비하는 중")
-        self.result_var.set("-")
+        self.set_result_text("-")
         self.open_folder_button.configure(state="disabled")
 
         media_type = self.selected_media()
@@ -450,13 +464,23 @@ class MainWindow:
                 f"용량: {format_file_size(audio.get('bytes'))}",
                 f"저장 위치: {audio['path']}",
             ]
-        self.result_var.set("\n".join(lines))
+        self.set_result_text("\n".join(lines))
         self.open_folder_button.configure(state="normal")
         self.set_busy(False)
 
     def on_failed(self, message: str) -> None:
         self.show_error(message)
         self.set_busy(False)
+
+    def set_result_text(self, text: str) -> None:
+        self.result_text.configure(state="normal")
+        self.result_text.delete("1.0", "end")
+        self.result_text.insert("1.0", text)
+        self.result_text.configure(state="disabled")
+
+    def select_all_result_text(self, _event: object | None = None) -> str:
+        self.result_text.tag_add("sel", "1.0", "end-1c")
+        return "break"
 
     def open_output_dir(self) -> None:
         open_in_file_manager(self.last_output_dir)
@@ -480,7 +504,7 @@ class MainWindow:
     def show_error(self, message: str) -> None:
         self.progress.configure(value=0)
         self.status_var.set("실패")
-        self.result_var.set(message)
+        self.set_result_text(message)
         messagebox.showerror("추출 실패", message)
 
 
