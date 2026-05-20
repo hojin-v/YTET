@@ -163,7 +163,9 @@ Every release build uploads:
 
 ## Source Environment
 
-소스 코드를 내려받아 실행하는 경우에도 Windows만 있으면 됩니다. WSL은 필요하지 않습니다.
+공식 소스 실행 경로는 Windows용입니다. GitHub에서 소스 코드를 받은 뒤 Windows PowerShell에서 `YTET.cmd`를 실행하세요.
+
+릴리즈 파일, 자동 설정 스크립트, 빌드 스크립트는 Windows 환경을 기준으로 제공됩니다. WSL/Linux에서 Python 코드 일부를 수동으로 실행할 수는 있지만, 자동 설정과 배포 대상은 Windows입니다.
 
 ```powershell
 .\YTET.cmd
