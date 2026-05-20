@@ -7,7 +7,7 @@ import sys
 import threading
 import traceback
 from pathlib import Path
-from tkinter import BooleanVar, Button, Tk, filedialog, messagebox
+from tkinter import BooleanVar, Button, TclError, Tk, filedialog, messagebox
 from tkinter import StringVar
 from tkinter import ttk
 from typing import Any
@@ -97,6 +97,13 @@ class MainWindow:
         style.configure("TButton", font=("Segoe UI", 10), padding=(16, 8))
         style.configure("TEntry", padding=(8, 7))
         style.configure("TCombobox", font=("Segoe UI", 11), padding=(10, 9))
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", "#ffffff")],
+            selectbackground=[("readonly", "#ffffff")],
+            selectforeground=[("readonly", "#111827")],
+            foreground=[("readonly", "#111827")],
+        )
         style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
         style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(20, 9))
 
@@ -256,9 +263,18 @@ class MainWindow:
         self.update_media_button_styles()
         self.update_video_option_visibility()
         self.update_selection_help()
+        self.root.after_idle(self.clear_format_highlight)
 
     def on_format_changed(self, _event: object | None = None) -> None:
         self.update_selection_help()
+        self.root.after_idle(self.clear_format_highlight)
+
+    def clear_format_highlight(self) -> None:
+        try:
+            self.format_select.selection_clear()
+        except TclError:
+            pass
+        self.root.focus_set()
 
     def update_selection_help(self) -> None:
         if self.selected_media() == "video":
