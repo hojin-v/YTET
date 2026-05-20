@@ -55,12 +55,13 @@ YTET는 YouTube URL을 넣으면 커버 이미지와 메타데이터가 포함�
 ## 폴더 안 파일
 
 - `YTET.cmd`: 실행 파일처럼 누르는 런처
-- `YouTubeAudioExtractor.cmd`: 예전 이름으로 실행해도 동작하도록 남긴 호환 런처
 - `SETUP.ps1`: 첫 실행 환경 설치 스크립트
 - `README.md`: 사용법
 - `src`: 앱 내부 코드
 - `requirements.txt`, `pyproject.toml`, `run_app.py`: 실행에 필요한 Python 구성 파일
 - `setup.log`, `app-error.log`: 문제가 생겼을 때만 생기는 로그 파일
+
+GitHub Release의 Windows ZIP에는 일반 사용자용 `YTET.exe`와 `README.md`만 들어갑니다. `.cmd`와 `SETUP.ps1`은 소스 폴더를 직접 받아 실행할 때만 쓰는 보조 파일입니다.
 
 ## 업데이트
 
