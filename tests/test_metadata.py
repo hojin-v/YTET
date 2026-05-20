@@ -372,7 +372,7 @@ class MetadataTests(unittest.TestCase):
                 video_path.write_bytes(b"video")
                 subtitle_path = video_dir / "video.en.srt"
                 subtitle_path.write_text("subtitle", encoding="utf-8")
-                return file_record(video_path, "video/mp4"), ["en", "ko"], [subtitle_path], ["en", "ko"]
+                return file_record(video_path, "video/mp4"), ["en", "ko"], [subtitle_path], ["en", "ko"], {}
 
             with (
                 patch(
@@ -404,6 +404,41 @@ class MetadataTests(unittest.TestCase):
                 sorted(path.name for path in output_dir.iterdir()),
                 ["Channel Name - A Video.en.srt", "Channel Name - A Video.mp4"],
             )
+
+    def test_video_extraction_reports_downloaded_format_when_file_probe_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output_dir = Path(temp)
+
+            def fake_download_video(_url, video_dir, _progress, _quality, include_subtitles=False, include_multi_audio=False):
+                video_path = video_dir / "video.mkv"
+                video_path.write_bytes(b"video")
+                downloaded_info = {
+                    "requested_formats": [
+                        {"vcodec": "vp9", "width": 3840, "height": 2160, "fps": 60},
+                        {"acodec": "opus", "vcodec": "none"},
+                    ]
+                }
+                return file_record(video_path, "video/x-matroska"), [], [], ["en"], downloaded_info
+
+            with (
+                patch(
+                    "youtube_audio_extractor.extractor.fetch_video_info",
+                    return_value={
+                        "id": "abc123",
+                        "title": "A Video",
+                        "channel": "Channel Name",
+                        "width": 1920,
+                        "height": 1080,
+                        "fps": 60,
+                        "vcodec": "vp9",
+                    },
+                ),
+                patch("youtube_audio_extractor.extractor.download_video", side_effect=fake_download_video),
+                patch("youtube_audio_extractor.extractor.video_quality_from_file", return_value=None),
+            ):
+                result = extract_youtube_video("https://youtu.be/abc123", output_dir)
+
+            self.assertEqual(result.video_quality, "3840x2160, 60fps, vp9")
 
 
 if __name__ == "__main__":

@@ -296,7 +296,7 @@ def extract_youtube_video(
     metadata = build_track_metadata(info, safe_url, include_lyrics=False)
 
     emit(progress, stage="video", percent=20, message="영상 다운로드를 시작하는 중")
-    video_file, _requested_subtitle_languages, subtitle_paths, audio_languages = download_video(
+    video_file, _requested_subtitle_languages, subtitle_paths, audio_languages, downloaded_info = download_video(
         safe_url,
         output_dir,
         progress,
@@ -317,7 +317,7 @@ def extract_youtube_video(
         subtitle_languages=subtitle_languages,
         subtitle_files=subtitle_files,
         audio_languages=audio_languages,
-        video_quality=video_quality_from_file(video_path) or video_quality_from_info(info),
+        video_quality=video_quality_from_file(video_path) or video_quality_from_info(downloaded_info) or video_quality_from_info(info),
         subtitles_embedded=subtitles_embedded,
         subtitles_requested=include_subtitles,
         multi_audio_requested=include_multi_audio,
@@ -615,7 +615,7 @@ def download_video(
     video_quality: str | None = None,
     include_subtitles: bool = False,
     include_multi_audio: bool = False,
-) -> tuple[ExtractedFile, list[str], list[Path], list[str]]:
+) -> tuple[ExtractedFile, list[str], list[Path], list[str], dict[str, Any]]:
     YoutubeDL, DownloadError = load_yt_dlp()
     if include_subtitles:
         cleanup_subtitle_sidecars(output_dir)
@@ -632,7 +632,7 @@ def download_video(
     if include_multi_audio:
         audio_languages = ensure_korean_audio_if_available(video_path, info, url, progress)
     subtitle_paths = collect_subtitle_sidecars(output_dir) if include_subtitles else []
-    return file_record(video_path, mime_for_video(video_path)), subtitle_languages_from_info(info), subtitle_paths, audio_languages
+    return file_record(video_path, mime_for_video(video_path)), subtitle_languages_from_info(info), subtitle_paths, audio_languages, info
 
 
 def audio_download_options(
@@ -1049,7 +1049,7 @@ def mux_extra_audio_track(
         ]
     )
 
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = run_subprocess_hidden(command, capture_output=True, text=True, check=False)
     if completed.returncode != 0 or not temp_path.is_file():
         temp_path.unlink(missing_ok=True)
         raise ExtractorError(f"한국어 오디오 트랙 추가에 실패했습니다: {completed.stderr.strip()}")
@@ -1061,6 +1061,16 @@ def require_ffmpeg() -> str:
     if not ffmpeg_path:
         raise ExtractorError("mp3 변환은 ffmpeg가 필요합니다. `python -m pip install -e .`를 다시 실행하세요.")
     return ffmpeg_path
+
+
+def run_subprocess_hidden(command: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+    if sys.platform.startswith("win"):
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        kwargs.setdefault("startupinfo", startupinfo)
+        kwargs.setdefault("creationflags", getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return subprocess.run(command, **kwargs)
 
 
 def find_ffmpeg() -> str | None:
@@ -1093,7 +1103,7 @@ def remux_webm_opus_if_needed(audio_path: Path) -> Path:
         "copy",
         str(opus_path),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = run_subprocess_hidden(command, capture_output=True, text=True, check=False)
     if completed.returncode != 0 or not opus_path.is_file():
         raise ExtractorError(f"최고음질 Opus remux에 실패했습니다: {completed.stderr.strip()}")
     audio_path.unlink(missing_ok=True)
@@ -1116,7 +1126,7 @@ def remux_m4a_for_compatibility(audio_path: Path) -> Path:
         "+faststart",
         str(temp_path),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = run_subprocess_hidden(command, capture_output=True, text=True, check=False)
     if completed.returncode != 0 or not temp_path.is_file():
         temp_path.unlink(missing_ok=True)
         raise ExtractorError(f"M4A 호환성 재포장에 실패했습니다: {completed.stderr.strip()}")
@@ -1420,7 +1430,7 @@ def ffmpeg_probe_text(path: Path) -> str | None:
     ffmpeg_path = find_ffmpeg()
     if not ffmpeg_path:
         return None
-    completed = subprocess.run(
+    completed = run_subprocess_hidden(
         [ffmpeg_path, "-hide_banner", "-i", str(path)],
         capture_output=True,
         text=True,
@@ -1505,7 +1515,7 @@ def ffprobe_json(path: Path) -> dict[str, Any] | None:
     if not probe_path:
         return None
 
-    completed = subprocess.run(
+    completed = run_subprocess_hidden(
         [probe_path, "-v", "quiet", "-print_format", "json", "-show_streams", str(path)],
         capture_output=True,
         text=True,
