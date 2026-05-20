@@ -39,7 +39,7 @@ VIDEO_QUALITY_OPTIONS = [
     ("480p MP4 · 최소용량", "480"),
 ]
 AUDIO_FORMAT_DETAILS = {
-    "m4a": "M4A(AAC) · 50-90MB/시간 · Android/iOS/Windows 호환",
+    "m4a": "M4A(AAC) · 50-90MB/시간 · 기본 추천",
     "original": "Original Opus · 40-80MB/시간 · 최고 효율 · 일부 플레이어 코덱 필요",
     "mp3": "MP3 · 60-120MB/시간 · 구형 기기 호환 · 용량 효율 낮음",
 }
