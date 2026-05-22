@@ -79,7 +79,6 @@ class MainWindow:
         self.media_var = StringVar(value=MEDIA_OPTIONS[0][1])
         self.format_var = StringVar(value=FORMAT_OPTIONS[0][0])
         self.include_subtitles_var = BooleanVar(value=False)
-        self.include_multi_audio_var = BooleanVar(value=False)
         self.selection_help_var = StringVar()
         self.status_var = StringVar(value="URL과 저장 폴더를 입력한 뒤 추출을 누르세요.")
 
@@ -167,21 +166,8 @@ class MainWindow:
             cursor="hand2",
             takefocus=True,
         )
-        self.subtitle_check.grid(row=0, column=0, sticky="e", padx=(0, 8), ipady=2)
-        self.multi_audio_check = Button(
-            self.video_options_frame,
-            text="다중 오디오 · 원본/한국어",
-            command=self.toggle_multi_audio,
-            font=("Segoe UI", 10, "bold"),
-            padx=14,
-            pady=8,
-            borderwidth=1,
-            relief="raised",
-            cursor="hand2",
-            takefocus=True,
-        )
-        self.multi_audio_check.grid(row=0, column=1, sticky="e", ipady=2)
-        self.video_option_buttons.extend([self.subtitle_check, self.multi_audio_check])
+        self.subtitle_check.grid(row=0, column=0, sticky="e", ipady=2)
+        self.video_option_buttons.append(self.subtitle_check)
 
         ttk.Label(frame, text="포맷 / 품질", style="Section.TLabel").grid(row=6, column=0, sticky="w", pady=(16, 6))
         controls = ttk.Frame(frame)
@@ -255,10 +241,6 @@ class MainWindow:
         self.include_subtitles_var.set(not self.include_subtitles_var.get())
         self.update_video_option_button_styles()
 
-    def toggle_multi_audio(self) -> None:
-        self.include_multi_audio_var.set(not self.include_multi_audio_var.get())
-        self.update_video_option_button_styles()
-
     def on_media_changed(self, _event: object | None = None) -> None:
         if self.selected_media() == "video":
             self.format_select.configure(
@@ -310,7 +292,6 @@ class MainWindow:
 
     def update_video_option_button_styles(self) -> None:
         set_choice_button_style(self.subtitle_check, self.include_subtitles_var.get())
-        set_choice_button_style(self.multi_audio_check, self.include_multi_audio_var.get())
 
     def choose_output_dir(self) -> None:
         initial = self.output_var.get().strip() or str(DEFAULT_OUTPUT_DIR)
@@ -342,10 +323,9 @@ class MainWindow:
         media_type = self.selected_media()
         format_or_quality = self.selected_video_quality() if media_type == "video" else self.selected_format()
         include_subtitles = self.include_subtitles_var.get() if media_type == "video" else False
-        include_multi_audio = self.include_multi_audio_var.get() if media_type == "video" else False
         self.worker = threading.Thread(
             target=self._run_extract,
-            args=(url, output_dir, media_type, format_or_quality, include_subtitles, include_multi_audio),
+            args=(url, output_dir, media_type, format_or_quality, include_subtitles),
             daemon=True,
         )
         self.worker.start()
@@ -357,7 +337,6 @@ class MainWindow:
         media_type: str,
         format_or_quality: str,
         include_subtitles: bool,
-        include_multi_audio: bool,
     ) -> None:
         def on_progress(payload: dict[str, Any]) -> None:
             self.events.put(("progress", payload))
@@ -370,7 +349,6 @@ class MainWindow:
                     on_progress,
                     format_or_quality,
                     include_subtitles=include_subtitles,
-                    include_multi_audio=include_multi_audio,
                 )
             else:
                 result = extract_youtube(url, output_dir, on_progress, format_or_quality)
@@ -430,20 +408,15 @@ class MainWindow:
             video = result["video"]
             subtitle_languages = result.get("subtitle_languages") or []
             subtitle_files = result.get("subtitle_files") or []
-            audio_languages = result.get("audio_languages") or []
             video_quality = result.get("video_quality") or "확인 불가"
             video_quality = video_quality_with_source(video_quality, result.get("video_quality_source"))
             video_format = video_format_label(video["name"], video.get("mime_type"))
             subtitles_requested = bool(result.get("subtitles_requested"))
-            multi_audio_requested = bool(result.get("multi_audio_requested"))
             subtitle_text = ", ".join(subtitle_languages) if subtitle_languages else "추출된 자막 없음"
             subtitle_file_text = ", ".join(item["name"] for item in subtitle_files) if subtitle_files else "없음"
             if not subtitles_requested:
                 subtitle_text = "선택 안 함"
                 subtitle_file_text = "선택 안 함"
-            audio_text = ", ".join(audio_languages) if audio_languages else "확인 불가"
-            if not multi_audio_requested:
-                audio_text = "기본 오디오"
             lines = [
                 f"파일: {video['name']}",
                 f"제목: {metadata['title']}",
@@ -451,7 +424,6 @@ class MainWindow:
                 f"형식: {video_format}",
                 f"화질/코덱: {video_quality}",
                 f"용량: {format_file_size(video.get('bytes'))}",
-                f"오디오: {audio_text}",
                 f"자막: {subtitle_text}",
                 f"자막 파일: {subtitle_file_text}",
                 f"저장 위치: {video['path']}",

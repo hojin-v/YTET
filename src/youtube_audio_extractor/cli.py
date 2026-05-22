@@ -37,11 +37,6 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Include registered Korean/English subtitles in video mode.",
     )
-    parser.add_argument(
-        "--include-multi-audio",
-        action="store_true",
-        help="Include extra original/Korean audio tracks in video mode when available.",
-    )
     args = parser.parse_args(argv)
 
     output_dir = args.output or Path("downloads") / time.strftime("cli-%Y%m%d-%H%M%S")
@@ -59,7 +54,6 @@ def main(argv: list[str] | None = None) -> int:
                 progress,
                 args.video_quality,
                 include_subtitles=args.include_subtitles,
-                include_multi_audio=args.include_multi_audio,
             )
         else:
             result = extract_youtube(args.url, output_dir, progress, args.format)

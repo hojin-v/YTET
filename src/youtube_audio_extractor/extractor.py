@@ -100,12 +100,10 @@ class VideoExtractionResult:
     video: ExtractedFile
     subtitle_languages: list[str]
     subtitle_files: list[ExtractedFile]
-    audio_languages: list[str]
     video_quality: str | None
     video_quality_source: str | None
     subtitles_embedded: bool
     subtitles_requested: bool
-    multi_audio_requested: bool
     extracted_at: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -286,7 +284,6 @@ def extract_youtube_video(
     progress: ProgressCallback | None = None,
     video_quality: str | None = None,
     include_subtitles: bool = False,
-    include_multi_audio: bool = False,
 ) -> VideoExtractionResult:
     safe_url = validate_youtube_url(url)
     selected_video_quality = normalize_video_quality(video_quality)
@@ -297,13 +294,12 @@ def extract_youtube_video(
     metadata = build_track_metadata(info, safe_url, include_lyrics=False)
 
     emit(progress, stage="video", percent=20, message="영상 다운로드를 시작하는 중")
-    video_file, _requested_subtitle_languages, subtitle_paths, audio_languages, downloaded_info = download_video(
+    video_file, _requested_subtitle_languages, subtitle_paths, downloaded_info = download_video(
         safe_url,
         output_dir,
         progress,
         selected_video_quality,
         include_subtitles=include_subtitles,
-        include_multi_audio=include_multi_audio,
     )
     video_path = rename_video_file(Path(video_file.path), metadata)
     video_file = file_record(video_path, video_file.mime_type)
@@ -324,12 +320,10 @@ def extract_youtube_video(
         video=video_file,
         subtitle_languages=subtitle_languages,
         subtitle_files=subtitle_files,
-        audio_languages=audio_languages,
         video_quality=video_quality_label,
         video_quality_source=video_quality_source,
         subtitles_embedded=subtitles_embedded,
         subtitles_requested=include_subtitles,
-        multi_audio_requested=include_multi_audio,
         extracted_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     )
 
@@ -623,8 +617,7 @@ def download_video(
     progress: ProgressCallback | None = None,
     video_quality: str | None = None,
     include_subtitles: bool = False,
-    include_multi_audio: bool = False,
-) -> tuple[ExtractedFile, list[str], list[Path], list[str], dict[str, Any]]:
+) -> tuple[ExtractedFile, list[str], list[Path], dict[str, Any]]:
     YoutubeDL, DownloadError = load_yt_dlp()
     if include_subtitles:
         cleanup_subtitle_sidecars(output_dir)
@@ -637,11 +630,8 @@ def download_video(
         raise ExtractorError(f"영상 다운로드에 실패했습니다: {exc}") from exc
 
     video_path = find_downloaded_video(output_dir)
-    if include_multi_audio:
-        ensure_korean_audio_if_available(video_path, info, url, progress)
-    audio_languages = audio_stream_languages_with_retries(video_path)
     subtitle_paths = collect_subtitle_sidecars(output_dir) if include_subtitles else []
-    return file_record(video_path, mime_for_video(video_path)), subtitle_languages_from_info(info), subtitle_paths, audio_languages, info
+    return file_record(video_path, mime_for_video(video_path)), subtitle_languages_from_info(info), subtitle_paths, info
 
 
 def audio_download_options(
@@ -746,322 +736,6 @@ def video_quality_profile(video_quality: str | None = None) -> tuple[str, str]:
         f"best[height<={max_height}][ext=mp4]"
     )
     return format_selector, "mp4"
-
-
-def ensure_korean_audio_if_available(
-    video_path: Path,
-    info: Any,
-    url: str,
-    progress: ProgressCallback | None = None,
-) -> None:
-    audio_languages = audio_stream_languages(video_path)
-    if not audio_languages or audio_languages == ["und"]:
-        audio_languages = selected_audio_languages_from_info(info)
-    original_format = select_original_audio_format(info)
-    korean_format = select_korean_audio_format(info)
-
-    formats_to_add: list[tuple[dict[str, Any], str, str]] = []
-    original_language = audio_format_language(original_format)
-    korean_language = audio_format_language(korean_format)
-
-    if (
-        original_format
-        and audio_languages
-        and original_language
-        and not audio_language_present(audio_languages, original_language)
-    ):
-        formats_to_add.append((original_format, "원본 오디오 트랙을 추가하는 중", "Original"))
-
-    if (
-        korean_format
-        and korean_language
-        and not is_korean_language(original_language)
-        and not audio_language_present(audio_languages, korean_language)
-        and not any(same_audio_format(korean_format, item[0]) for item in formats_to_add)
-    ):
-        formats_to_add.append((korean_format, "한국어 오디오 트랙을 추가하는 중", "Korean"))
-
-    languages = list(audio_languages)
-    for audio_format, message, fallback_title in formats_to_add:
-        emit(progress, stage="audio", percent=97, message=message)
-        with tempfile.TemporaryDirectory(prefix="ytet-extra-audio-") as temp_dir:
-            extra_audio = download_format_to_temp(url, audio_download_selector(audio_format), Path(temp_dir))
-            mux_extra_audio_track(
-                video_path,
-                extra_audio,
-                language=ffmpeg_language_tag(audio_format_language(audio_format)),
-                title=audio_track_title(audio_format, fallback_title),
-                transcode_to_aac=should_transcode_extra_audio(video_path, audio_format),
-            )
-
-        language = audio_format_language(audio_format)
-        if language and not audio_language_present(languages, language):
-            languages.append(normalize_media_language(language) or language)
-
-
-def select_original_audio_format(info: Any) -> dict[str, Any] | None:
-    if not isinstance(info, dict):
-        return None
-    formats = info.get("formats")
-    if not isinstance(formats, list):
-        return None
-
-    candidates = [
-        item
-        for item in formats
-        if isinstance(item, dict)
-        and item.get("format_id")
-        and is_audio_only(item)
-        and is_original_audio_format(item)
-    ]
-    if not candidates:
-        return None
-
-    return max(candidates, key=audio_quality_key)
-
-
-def is_original_audio_format(item: dict[str, Any]) -> bool:
-    language_preference = as_int(item.get("language_preference"))
-    note = (first_text(item.get("format_note")) or "").lower()
-    return (language_preference is not None and language_preference >= 10) or "original" in note
-
-
-def audio_language_present(languages: Sequence[str], target_language: str | None) -> bool:
-    if not target_language:
-        return False
-    return any(languages_equivalent(language, target_language) for language in languages)
-
-
-def languages_equivalent(left: str | None, right: str | None) -> bool:
-    left_normalized = normalize_media_language(left)
-    right_normalized = normalize_media_language(right)
-    if not left_normalized or not right_normalized:
-        return False
-    if is_korean_language(left_normalized) and is_korean_language(right_normalized):
-        return True
-    return left_normalized == right_normalized
-
-
-def same_audio_format(left: dict[str, Any], right: dict[str, Any]) -> bool:
-    left_id = first_text(left.get("format_id"))
-    right_id = first_text(right.get("format_id"))
-    if left_id and right_id and left_id == right_id:
-        return languages_equivalent(audio_format_language(left), audio_format_language(right))
-    return False
-
-
-def audio_format_language(item: dict[str, Any] | None) -> str | None:
-    if not isinstance(item, dict):
-        return None
-    return first_text(item.get("language"))
-
-
-def audio_download_selector(item: dict[str, Any]) -> str:
-    language = audio_format_language(item)
-    if language:
-        return f"bestaudio[language={language}]"
-    return first_text(item.get("format_id")) or "bestaudio"
-
-
-def audio_track_title(item: dict[str, Any], fallback: str) -> str:
-    note = first_text(item.get("format_note"))
-    if not note:
-        return fallback
-    return re.sub(r"\s+", " ", note).strip()[:80] or fallback
-
-
-def ffmpeg_language_tag(language: str | None) -> str:
-    normalized = normalize_media_language(language)
-    return {
-        "en": "eng",
-        "ko": "kor",
-    }.get(normalized or "", normalized or "und")
-
-
-def should_transcode_extra_audio(video_path: Path, item: dict[str, Any]) -> bool:
-    if is_aac_format(item):
-        return False
-    return video_path.suffix.lower() in {".mp4", ".m4v", ".mov"}
-
-
-def audio_quality_key(item: dict[str, Any]) -> tuple[int, int, int, int]:
-    extension = first_text(item.get("ext")) or ""
-    codec = first_text(item.get("acodec")) or ""
-    bitrate = as_int(item.get("abr")) or as_int(item.get("tbr")) or 0
-    filesize = as_int(item.get("filesize")) or as_int(item.get("filesize_approx")) or 0
-    return (
-        1 if extension == "m4a" else 0,
-        1 if codec.startswith("mp4a") else 0,
-        bitrate,
-        filesize,
-    )
-
-
-def selected_audio_languages_from_info(info: Any) -> list[str]:
-    if not isinstance(info, dict):
-        return []
-    formats = info.get("requested_formats")
-    if not isinstance(formats, list):
-        formats = [info]
-
-    languages: list[str] = []
-    for item in formats:
-        if not isinstance(item, dict) or not has_audio(item):
-            continue
-        language = first_text(item.get("language"))
-        if language and language not in languages:
-            languages.append(language)
-    return languages
-
-
-def select_korean_audio_format(info: Any) -> dict[str, Any] | None:
-    if not isinstance(info, dict):
-        return None
-    formats = info.get("formats")
-    if not isinstance(formats, list):
-        return None
-
-    candidates = [
-        item
-        for item in formats
-        if isinstance(item, dict)
-        and item.get("format_id")
-        and is_audio_only(item)
-        and is_korean_language(first_text(item.get("language")))
-    ]
-    if not candidates:
-        return None
-
-    return max(candidates, key=korean_audio_quality_key)
-
-
-def korean_audio_quality_key(item: dict[str, Any]) -> tuple[int, int, int, int]:
-    extension = first_text(item.get("ext")) or ""
-    codec = first_text(item.get("acodec")) or ""
-    bitrate = as_int(item.get("abr")) or as_int(item.get("tbr")) or 0
-    filesize = as_int(item.get("filesize")) or as_int(item.get("filesize_approx")) or 0
-    return (
-        1 if extension == "m4a" else 0,
-        1 if codec.startswith("mp4a") else 0,
-        bitrate,
-        filesize,
-    )
-
-
-def is_audio_only(item: dict[str, Any]) -> bool:
-    return has_audio(item) and first_text(item.get("vcodec"), "none") == "none"
-
-
-def has_audio(item: dict[str, Any]) -> bool:
-    return first_text(item.get("acodec"), "none") != "none"
-
-
-def is_aac_format(item: dict[str, Any]) -> bool:
-    return (first_text(item.get("ext")) == "m4a") or (first_text(item.get("acodec")) or "").startswith("mp4a")
-
-
-def is_korean_language(language: str | None) -> bool:
-    if not language:
-        return False
-    normalized = language.replace("_", "-").lower()
-    return normalized == "ko" or normalized.startswith("ko-") or normalized == "kor"
-
-
-def audio_stream_languages(video_path: Path) -> list[str]:
-    data = ffprobe_json(video_path)
-    languages: list[str] = []
-    if data:
-        for stream in data.get("streams", []):
-            if not isinstance(stream, dict) or stream.get("codec_type") != "audio":
-                continue
-            tags = stream.get("tags") if isinstance(stream.get("tags"), dict) else {}
-            language = normalize_media_language(first_text(tags.get("language"))) or "und"
-            if language and language not in languages:
-                languages.append(language)
-    if languages:
-        return languages
-    return parse_audio_languages_from_ffmpeg_output(ffmpeg_probe_text(video_path) or "")
-
-
-def audio_stream_count(video_path: Path) -> int:
-    data = ffprobe_json(video_path)
-    if data:
-        return sum(
-            1
-            for stream in data.get("streams", [])
-            if isinstance(stream, dict) and stream.get("codec_type") == "audio"
-        )
-    return parse_audio_stream_count_from_ffmpeg_output(ffmpeg_probe_text(video_path) or "")
-
-
-def download_format_to_temp(url: str, format_id: str, output_dir: Path) -> Path:
-    YoutubeDL, DownloadError = load_yt_dlp()
-    options = {
-        **yt_dlp_base_options(),
-        "format": format_id,
-        "outtmpl": {"default": str(output_dir / "audio.%(ext)s")},
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "noprogress": True,
-        "continuedl": True,
-        "retries": 3,
-        "fragment_retries": 3,
-        "windowsfilenames": True,
-    }
-    try:
-        with YoutubeDL(options) as ydl:
-            ydl.extract_info(url, download=True)
-    except DownloadError as exc:
-        raise ExtractorError(f"한국어 오디오 다운로드에 실패했습니다: {exc}") from exc
-
-    candidates = [path for path in output_dir.glob("audio.*") if path.is_file() and path.suffix.lower() not in {".part", ".ytdl", ".json"}]
-    if not candidates:
-        raise ExtractorError("다운로드된 한국어 오디오 파일을 찾지 못했습니다.")
-    return max(candidates, key=lambda item: item.stat().st_mtime)
-
-
-def mux_extra_audio_track(
-    video_path: Path,
-    audio_path: Path,
-    language: str,
-    title: str,
-    transcode_to_aac: bool,
-) -> None:
-    ffmpeg_path = require_ffmpeg()
-    new_audio_index = max(1, audio_stream_count(video_path))
-    temp_path = video_path.with_name(f"{video_path.stem}.temp-audio{video_path.suffix}")
-    command = [
-        ffmpeg_path,
-        "-y",
-        "-i",
-        str(video_path),
-        "-i",
-        str(audio_path),
-        "-map",
-        "0",
-        "-map",
-        "1:a:0",
-        "-c",
-        "copy",
-    ]
-    if transcode_to_aac:
-        command.extend([f"-c:a:{new_audio_index}", "aac", f"-b:a:{new_audio_index}", "160k"])
-    command.extend(
-        [
-            f"-metadata:s:a:{new_audio_index}",
-            f"language={language}",
-            f"-metadata:s:a:{new_audio_index}",
-            f"title={title}",
-            str(temp_path),
-        ]
-    )
-
-    completed = run_subprocess_hidden(command, capture_output=True, text=True, check=False)
-    if completed.returncode != 0 or not temp_path.is_file():
-        temp_path.unlink(missing_ok=True)
-        raise ExtractorError(f"한국어 오디오 트랙 추가에 실패했습니다: {completed.stderr.strip()}")
-    temp_path.replace(video_path)
 
 
 def require_ffmpeg() -> str:
@@ -1449,16 +1123,6 @@ def video_quality_from_file_with_retries(video_path: Path, attempts: int = 3, de
     return None
 
 
-def audio_stream_languages_with_retries(video_path: Path, attempts: int = 3, delay_seconds: float = 0.3) -> list[str]:
-    for attempt in range(attempts):
-        languages = audio_stream_languages(video_path)
-        if languages:
-            return languages
-        if attempt + 1 < attempts:
-            time.sleep(delay_seconds)
-    return []
-
-
 def subtitle_stream_languages_with_retries(video_path: Path, attempts: int = 3, delay_seconds: float = 0.3) -> list[str]:
     for attempt in range(attempts):
         languages = subtitle_stream_languages(video_path)
@@ -1551,23 +1215,6 @@ def parse_subtitle_languages_from_ffmpeg_output(text: str) -> list[str]:
         if language and language not in languages:
             languages.append(language)
     return languages
-
-
-def parse_audio_languages_from_ffmpeg_output(text: str) -> list[str]:
-    languages: list[str] = []
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if "Audio:" not in line:
-            continue
-        match = re.search(r"Stream\s+#\d+:\d+(?:\[[^\]]+\])?(?:\(([^)]+)\))?:\s*Audio:", line)
-        language = normalize_media_language(match.group(1) if match else None) or "und"
-        if language not in languages:
-            languages.append(language)
-    return languages
-
-
-def parse_audio_stream_count_from_ffmpeg_output(text: str) -> int:
-    return sum(1 for line in text.splitlines() if "Audio:" in line)
 
 
 def normalize_media_language(language: str | None) -> str | None:

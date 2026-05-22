@@ -18,16 +18,15 @@ YouTube 미디어 스트림과 메타데이터 동작을 확인하는 Windows용
 
 ## Overview
 
-YTET는 권한이 있는 YouTube 링크를 대상으로 오디오/영상 스트림, 메타데이터, 자막, 다중 오디오 처리를 확인합니다.
+YTET는 권한이 있는 YouTube 링크를 대상으로 오디오/영상 스트림, 메타데이터, 자막 처리를 확인합니다.
 
-오디오는 커버 이미지와 제목, 아티스트, 원본 URL 같은 메타데이터를 파일 안에 포함합니다. 영상은 기본적으로 YouTube가 제공하는 최고 품질을 선택하고, 필요하면 1080p, 720p, 480p 이하의 낮은 용량 옵션으로 저장할 수 있습니다. 자막과 다중 오디오는 영상 추출 전에 선택합니다.
+오디오는 커버 이미지와 제목, 아티스트, 원본 URL 같은 메타데이터를 파일 안에 포함합니다. 영상은 기본적으로 YouTube가 제공하는 최고 품질을 선택하고, 필요하면 1080p, 720p, 480p 이하의 낮은 용량 옵션으로 저장할 수 있습니다. 자막은 영상 추출 전에 선택합니다.
 
 | Mode | Best For | Output |
 | --- | --- | --- |
 | Audio | 오디오 포맷과 메타데이터 확인 | `M4A (AAC)`, `Original Opus`, `MP3` |
 | Video | 영상 스트림과 컨테이너 확인 | 최고 품질 `MKV` 또는 호환 우선 `MP4` |
 | Subtitles | 선택형 한국어/영어 등록 자막 | 영상 내 자막 트랙 + `.srt` |
-| Multi Audio | 선택형 다국어 오디오 | 원본 오디오 + 한국어 오디오 트랙 |
 
 ## Features
 
@@ -39,7 +38,6 @@ YTET는 권한이 있는 YouTube 링크를 대상으로 오디오/영상 스트�
 | 4K/8K 지원 | 최고 품질 모드에서 YouTube가 제공하는 고해상도 스트림을 선택합니다. |
 | 저용량 영상 옵션 | 1080p, 720p, 480p 이하 품질로 저장할 수 있습니다. |
 | 선택형 자막 | `자막 포함` 선택 시 등록된 한국어/영어 자막을 저장하고 영상에도 삽입합니다. |
-| 선택형 다중 오디오 | `다중 오디오 포함` 선택 시 원본/한국어 오디오 트랙을 함께 보관합니다. |
 
 ## Quick Start
 
@@ -48,7 +46,7 @@ YTET는 권한이 있는 YouTube 링크를 대상으로 오디오/영상 스트�
 3. 권한이 있는 YouTube URL을 입력합니다.
 4. `음원` 또는 `영상`을 선택합니다.
 5. 저장 폴더와 포맷 또는 품질을 고릅니다.
-6. 영상일 경우 `자막 포함`, `다중 오디오 포함`을 필요에 맞게 선택합니다.
+6. 영상일 경우 `자막 포함`을 필요에 맞게 선택합니다.
 7. `추출`을 누릅니다.
 
 ## Audio
@@ -90,7 +88,7 @@ YouTube의 4K 이상 영상은 보통 H.264 MP4가 아니라 VP9 또는 AV1 같�
 용량: 18.9 MB
 ```
 
-## Subtitles & Audio Tracks
+## Subtitles
 
 영상 모드에서 `자막 포함`을 선택하면 업로더가 등록한 한국어와 영어 자막만 저장합니다.
 
@@ -98,13 +96,11 @@ YouTube의 4K 이상 영상은 보통 H.264 MP4가 아니라 VP9 또는 AV1 같�
 
 자동 생성 자막만 있는 영상은 기본적으로 자막을 저장하지 않습니다.
 
-영상 모드에서 `다중 오디오 포함`을 선택하면 여러 오디오 언어가 제공되는 영상의 원본 오디오를 유지합니다. 원본 오디오가 한국어가 아니고 YouTube가 한국어 오디오 트랙을 제공하면, 한국어 오디오도 함께 추가합니다.
-
 컨테이너별 차이는 다음과 같습니다.
 
 | Container | Tags |
 | --- | --- |
-| `MKV` | 원본 품질, AV1/VP9/Opus, 자막/다중 오디오 |
+| `MKV` | 원본 품질, AV1/VP9/Opus, 자막 |
 | `MP4` | 호환 우선, H.264/AAC, Android/Windows 기본 환경 |
 
 ## Output Rules
@@ -128,7 +124,7 @@ flowchart LR
     C -->|Video| G[Select quality profile]
     G --> H[Download video and audio streams]
     H --> I[Merge with FFmpeg]
-    I --> J[Optional subtitle and audio track muxing]
+    I --> J[Optional subtitle muxing]
     J --> K[Save video and subtitle files]
 ```
 
@@ -139,7 +135,7 @@ flowchart LR
 | App | Python, Tkinter | Lightweight Windows desktop UI |
 | Extraction | yt-dlp | YouTube metadata, stream selection, download orchestration |
 | YouTube Support | yt-dlp-ejs, bundled Deno runtime | YouTube JS challenge handling for full stream access |
-| Media Processing | FFmpeg via imageio-ffmpeg | Audio conversion, video merge, subtitle/audio track muxing |
+| Media Processing | FFmpeg via imageio-ffmpeg | Audio conversion, video merge, subtitle muxing |
 | Tagging | mutagen | Audio metadata and cover image embedding |
 | Packaging | PyInstaller | Single-file Windows executable build |
 | Automation | GitHub Actions | CI, Windows build, release publishing |
@@ -189,6 +185,6 @@ Python 3.10 이상은 먼저 설치되어 있어야 합니다. 네트워크 정�
 - 권한이 있는 콘텐츠에만 사용하세요.
 - YouTube 서비스 약관과 지역 법규를 확인해야 합니다.
 - YTET는 YouTube 또는 Google과 관련이 없습니다.
-- 영상 제공 품질, 자막, 다중 오디오 여부는 YouTube와 업로더 설정에 따라 달라집니다.
+- 영상 제공 품질과 자막 여부는 YouTube와 업로더 설정에 따라 달라집니다.
 - 4K 이상 영상은 파일 크기가 클 수 있고, 일부 플레이어에서 코덱 지원이 필요할 수 있습니다.
 - 처음 내려받은 실행 파일은 Windows 보안 경고가 표시될 수 있습니다. 신뢰할 수 있는 출처에서 받은 파일인지 확인한 뒤 실행하세요.
