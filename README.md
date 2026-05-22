@@ -4,7 +4,7 @@
 
 YouTube Extractor Toolkit
 
-YouTube URL 하나로 오디오와 영상을 저장하는 Windows용 데스크톱 추출 도구입니다.
+YouTube 미디어 스트림과 메타데이터 동작을 확인하는 Windows용 데스크톱 도구입니다.
 
 [![CI](https://github.com/hojin-v/YTET/actions/workflows/ci.yml/badge.svg)](https://github.com/hojin-v/YTET/actions/workflows/ci.yml)
 [![Release](https://github.com/hojin-v/YTET/actions/workflows/release.yml/badge.svg)](https://github.com/hojin-v/YTET/actions/workflows/release.yml)
@@ -18,14 +18,14 @@ YouTube URL 하나로 오디오와 영상을 저장하는 Windows용 데스크�
 
 ## Overview
 
-YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니다.
+YTET는 권한이 있는 YouTube 링크를 대상으로 오디오/영상 스트림, 메타데이터, 자막, 다중 오디오 처리를 확인합니다.
 
 오디오는 커버 이미지와 제목, 아티스트, 원본 URL 같은 메타데이터를 파일 안에 포함합니다. 영상은 기본적으로 YouTube가 제공하는 최고 품질을 선택하고, 필요하면 1080p, 720p, 480p 이하의 낮은 용량 옵션으로 저장할 수 있습니다. 자막과 다중 오디오는 영상 추출 전에 선택합니다.
 
 | Mode | Best For | Output |
 | --- | --- | --- |
-| Audio | 음악, 강의, 플레이리스트 정리 | `M4A (AAC)`, `Original Opus`, `MP3` |
-| Video | 롱폼, 숏폼, 고화질 보관 | 최고 품질 `MKV` 또는 호환 우선 `MP4` |
+| Audio | 오디오 포맷과 메타데이터 확인 | `M4A (AAC)`, `Original Opus`, `MP3` |
+| Video | 영상 스트림과 컨테이너 확인 | 최고 품질 `MKV` 또는 호환 우선 `MP4` |
 | Subtitles | 선택형 한국어/영어 등록 자막 | 영상 내 자막 트랙 + `.srt` |
 | Multi Audio | 선택형 다국어 오디오 | 원본 오디오 + 한국어 오디오 트랙 |
 
@@ -33,7 +33,7 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 
 | Feature | Description |
 | --- | --- |
-| URL 기반 추출 | YouTube URL을 넣고 저장 폴더를 고르면 추출을 시작합니다. |
+| URL 기반 추출 | 권한이 있는 YouTube URL을 넣고 저장 폴더를 고르면 추출을 시작합니다. |
 | 오디오 메타데이터 | 제목, 아티스트, 원본 URL, 커버 이미지를 가능한 범위에서 파일에 기록합니다. |
 | 자동 파일명 | 오디오는 `artist - title`, 영상은 `channel - title` 형식으로 저장합니다. |
 | 4K/8K 지원 | 최고 품질 모드에서 YouTube가 제공하는 고해상도 스트림을 선택합니다. |
@@ -45,7 +45,7 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 
 1. [Releases](https://github.com/hojin-v/YTET/releases)에서 최신 `YTET.exe` 또는 `YTET-버전-windows-x64.zip`을 받습니다.
 2. `YTET.exe`를 실행합니다.
-3. YouTube URL을 입력합니다.
+3. 권한이 있는 YouTube URL을 입력합니다.
 4. `음원` 또는 `영상`을 선택합니다.
 5. 저장 폴더와 포맷 또는 품질을 고릅니다.
 6. 영상일 경우 `자막 포함`, `다중 오디오 포함`을 필요에 맞게 선택합니다.
@@ -56,7 +56,7 @@ YTET는 YouTube 링크를 오디오 파일이나 영상 파일로 저장합니�
 | Format | When to Use |
 | --- | --- |
 | `M4A (AAC)` | 기본 추천 포맷 |
-| `Original Opus` | YouTube 원본 오디오에 가깝고 용량 효율이 좋은 포맷 |
+| `Original Opus` | 제공되는 원본 오디오 스트림에 가깝고 용량 효율이 좋은 포맷 |
 | `MP3` | 오래된 기기나 앱과의 호환성이 필요한 경우 |
 
 오디오 추출 결과에는 가능한 경우 다음 정보가 포함됩니다.
@@ -120,7 +120,7 @@ subtitle: channel - title.en.srt
 
 ```mermaid
 flowchart LR
-    A[YouTube URL] --> B[yt-dlp metadata lookup]
+    A[Authorized YouTube URL] --> B[yt-dlp metadata lookup]
     B --> C{Mode}
     C -->|Audio| D[Download best audio]
     D --> E[Embed metadata and cover]
@@ -188,6 +188,7 @@ Python 3.10 이상은 먼저 설치되어 있어야 합니다. 네트워크 정�
 
 - 권한이 있는 콘텐츠에만 사용하세요.
 - YouTube 서비스 약관과 지역 법규를 확인해야 합니다.
+- YTET는 YouTube 또는 Google과 관련이 없습니다.
 - 영상 제공 품질, 자막, 다중 오디오 여부는 YouTube와 업로더 설정에 따라 달라집니다.
 - 4K 이상 영상은 파일 크기가 클 수 있고, 일부 플레이어에서 코덱 지원이 필요할 수 있습니다.
 - 처음 내려받은 실행 파일은 Windows 보안 경고가 표시될 수 있습니다. 신뢰할 수 있는 출처에서 받은 파일인지 확인한 뒤 실행하세요.
