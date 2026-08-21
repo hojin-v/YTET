@@ -1,5 +1,6 @@
 param(
-    [switch]$NoShortcut
+    [switch]$NoShortcut,
+    [switch]$Update
 )
 
 $ErrorActionPreference = "Stop"
@@ -83,6 +84,18 @@ function Install-DenoRuntime {
 try {
     "==== Setup ====" | Set-Content -Path $Log -Encoding UTF8
     Set-Location -LiteralPath $Project
+
+    if ($Update) {
+        Write-Host "Updating YTET engine and dependencies..." -ForegroundColor Cyan
+        if (-not (Test-Path -LiteralPath $VenvPython)) {
+            throw "Virtual environment was not found. Please run setup without -Update first."
+        }
+        & $VenvPython -m pip install --upgrade "yt-dlp[default]" yt-dlp-ejs 2>&1 | Tee-Object -FilePath $Log -Append
+        if ($LASTEXITCODE -ne 0) { throw "Update failed. See log: $Log" }
+        Write-Host ""
+        Write-Host "Engine updated successfully to latest version." -ForegroundColor Green
+        return
+    }
 
     Write-Host "Setting up YTET..." -ForegroundColor Cyan
     $PythonCommand = Find-Python

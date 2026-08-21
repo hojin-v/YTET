@@ -38,6 +38,7 @@ YTET는 권한이 있는 YouTube 링크를 대상으로 오디오/영상 스트�
 | 4K/8K 지원 | 최고 품질 모드에서 YouTube가 제공하는 고해상도 스트림을 선택합니다. |
 | 저용량 영상 옵션 | 1080p, 720p, 480p 이하 품질로 저장할 수 있습니다. |
 | 선택형 자막 | `자막 포함` 선택 시 등록된 한국어/영어 자막을 저장하고 영상에도 삽입합니다. |
+| 엔진 무중단 업데이트 | 앱 상단의 `엔진 업데이트` 버튼 또는 CLI/스크립트로 소스 재배포 없이 최신 yt-dlp 유지. |
 
 ## Quick Start
 
@@ -111,6 +112,15 @@ video:    channel - title.ext
 subtitle: channel - title.ko.srt
 subtitle: channel - title.en.srt
 ```
+
+## Engine Updates (yt-dlp)
+
+YouTube의 잦은 변경사항에 대응하기 위해, 소스코드 수정이나 재배포 없이 `yt-dlp` 엔진을 최신 상태로 유지할 수 있습니다.
+
+- **GUI 앱**: 상단 헤더의 `엔진 업데이트` 버튼 클릭 (새 버전 자동 감지 및 추출 실패 시 원클릭 복구 지원)
+- **CLI**: `ytet --update` (또는 `python -m youtube_audio_extractor.cli --update`)
+- **실행 스크립트**: `.\YTET.cmd --update` 또는 `powershell .\SETUP.ps1 -Update`
+
 
 ## How It Works
 

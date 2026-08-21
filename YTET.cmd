@@ -4,6 +4,10 @@ set "PROJECT=%~dp0"
 set "PYTHONW=%PROJECT%.venv-win\Scripts\pythonw.exe"
 set "DENO=%PROJECT%runtimes\deno.exe"
 
+if /I "%~1"=="--update" goto update
+if /I "%~1"=="update" goto update
+if /I "%~1"=="/update" goto update
+
 if not exist "%PYTHONW%" (
   goto setup
 )
@@ -13,6 +17,11 @@ if not exist "%DENO%" (
 )
 
 goto run
+
+:update
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PROJECT%SETUP.ps1" -Update
+  pause
+  exit /b %ERRORLEVEL%
 
 :setup
   echo Setup is required.

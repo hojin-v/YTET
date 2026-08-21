@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ytet"
-version = "0.1.1"
+version = "0.1.4"
 description = "Local Windows GUI and CLI for extracting authorized YouTube audio and video from a URL."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "imageio-ffmpeg>=0.5.1",
   "mutagen>=1.47.0",
-  "yt-dlp[default]>=2026.3.17",
+  "yt-dlp[default]>=2026.8.19",
   "yt-dlp-ejs>=0.8.0",
 ]
 

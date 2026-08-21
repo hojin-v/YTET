@@ -13,6 +13,11 @@ from tkinter import ttk
 from typing import Any
 
 from .extractor import ExtractorError, extract_youtube, extract_youtube_video
+from .updater import (
+    check_yt_dlp_update_async,
+    get_installed_yt_dlp_version,
+    update_yt_dlp_async,
+)
 
 
 def app_root() -> Path:
@@ -22,7 +27,10 @@ def app_root() -> Path:
 
 
 PROJECT_ROOT = app_root()
-DEFAULT_OUTPUT_DIR = Path.home() / "Music" / "YTET"
+DEFAULT_YTET_DIR = Path.home() / "YTET"
+DEFAULT_AUDIO_OUTPUT_DIR = DEFAULT_YTET_DIR / "Music"
+DEFAULT_VIDEO_OUTPUT_DIR = DEFAULT_YTET_DIR / "Video"
+DEFAULT_OUTPUT_DIR = DEFAULT_AUDIO_OUTPUT_DIR
 FORMAT_OPTIONS = [
     ("M4A (AAC) - 기본 추천", "m4a"),
     ("Original Opus - 최고 효율/작은 용량", "original"),
@@ -70,22 +78,25 @@ class MainWindow:
         self.root = root
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.worker: threading.Thread | None = None
-        self.last_output_dir = DEFAULT_OUTPUT_DIR
+        self.last_output_dir = DEFAULT_AUDIO_OUTPUT_DIR
         self.media_buttons: list[tuple[str, Button]] = []
         self.video_option_buttons: list[Button] = []
+        self._last_extract_args: dict[str, Any] | None = None
 
         self.url_var = StringVar()
-        self.output_var = StringVar(value=str(DEFAULT_OUTPUT_DIR))
+        self.output_var = StringVar(value=str(DEFAULT_AUDIO_OUTPUT_DIR))
         self.media_var = StringVar(value=MEDIA_OPTIONS[0][1])
         self.format_var = StringVar(value=FORMAT_OPTIONS[0][0])
         self.include_subtitles_var = BooleanVar(value=False)
         self.selection_help_var = StringVar()
         self.status_var = StringVar(value="URL과 저장 폴더를 입력한 뒤 추출을 누르세요.")
+        self.engine_version_var = StringVar(value="yt-dlp 엔진 로딩 중...")
 
         self.root.title("YTET")
         self.root.minsize(860, 640)
         self._build_ui()
         self.root.after(100, self._poll_events)
+        self.root.after(400, self._check_engine_update_background)
 
     def _build_ui(self) -> None:
         self.root.option_add("*TCombobox*Listbox.font", "{Segoe UI} 12")
@@ -104,6 +115,7 @@ class MainWindow:
         )
         style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
         style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(20, 9))
+        style.configure("Engine.TButton", font=("Segoe UI", 9), padding=(10, 4))
 
         frame = ttk.Frame(self.root, padding=24)
         frame.grid(row=0, column=0, sticky="nsew")
@@ -111,8 +123,30 @@ class MainWindow:
         self.root.rowconfigure(0, weight=1)
         frame.columnconfigure(0, weight=1)
 
-        title = ttk.Label(frame, text="YTET", font=("Segoe UI", 24, "bold"))
+        # Header row with title and engine update button
+        header_row = ttk.Frame(frame)
+        header_row.grid(row=0, column=0, sticky="ew")
+        header_row.columnconfigure(0, weight=1)
+
+        title = ttk.Label(header_row, text="YTET", font=("Segoe UI", 24, "bold"))
         title.grid(row=0, column=0, sticky="w")
+
+        engine_frame = ttk.Frame(header_row)
+        engine_frame.grid(row=0, column=1, sticky="e")
+        self.engine_label = ttk.Label(
+            engine_frame,
+            textvariable=self.engine_version_var,
+            font=("Segoe UI", 9),
+            foreground="#4b5563",
+        )
+        self.engine_label.grid(row=0, column=0, sticky="e", padx=(0, 10))
+        self.update_engine_button = ttk.Button(
+            engine_frame,
+            text="엔진 업데이트",
+            style="Engine.TButton",
+            command=self.on_click_update_engine,
+        )
+        self.update_engine_button.grid(row=0, column=1, sticky="e")
 
         ttk.Label(frame, text="YouTube URL", style="Section.TLabel").grid(row=1, column=0, sticky="w", pady=(20, 6))
         self.url_input = ttk.Entry(frame, textvariable=self.url_var)
@@ -242,7 +276,19 @@ class MainWindow:
         self.update_video_option_button_styles()
 
     def on_media_changed(self, _event: object | None = None) -> None:
-        if self.selected_media() == "video":
+        media = self.selected_media()
+        current_path_str = self.output_var.get().strip()
+        known_defaults = {
+            str(DEFAULT_AUDIO_OUTPUT_DIR),
+            str(DEFAULT_VIDEO_OUTPUT_DIR),
+            str(Path.home() / "Music" / "YTET"),
+            "",
+        }
+        if current_path_str in known_defaults:
+            new_default = DEFAULT_VIDEO_OUTPUT_DIR if media == "video" else DEFAULT_AUDIO_OUTPUT_DIR
+            self.output_var.set(str(new_default))
+
+        if media == "video":
             self.format_select.configure(
                 values=[label for label, _value in VIDEO_QUALITY_OPTIONS],
                 state="readonly",
@@ -293,8 +339,35 @@ class MainWindow:
     def update_video_option_button_styles(self) -> None:
         set_choice_button_style(self.subtitle_check, self.include_subtitles_var.get())
 
+    def _check_engine_update_background(self) -> None:
+        installed = get_installed_yt_dlp_version() or "미설치"
+        self.engine_version_var.set(f"yt-dlp v{installed}")
+
+        def on_check_done(info: dict[str, Any]) -> None:
+            self.events.put(("engine_check_result", info))
+
+        check_yt_dlp_update_async(on_check_done)
+
+    def on_click_update_engine(self) -> None:
+        self.start_engine_update(should_retry=False)
+
+    def start_engine_update(self, should_retry: bool = False) -> None:
+        self.set_busy(True)
+        self.progress.configure(value=10)
+        self.status_var.set("yt-dlp 및 플러그인 업데이트 중...")
+        self.set_result_text("yt-dlp 패키지 최신 버전 다운로드 및 설치 중...")
+
+        def on_progress(msg: str) -> None:
+            self.events.put(("engine_update_progress", msg))
+
+        def on_done(success: bool, msg: str) -> None:
+            self.events.put(("engine_update_done", (success, msg, should_retry)))
+
+        update_yt_dlp_async(on_done, progress_callback=on_progress)
+
     def choose_output_dir(self) -> None:
-        initial = self.output_var.get().strip() or str(DEFAULT_OUTPUT_DIR)
+        default_for_media = DEFAULT_VIDEO_OUTPUT_DIR if self.selected_media() == "video" else DEFAULT_AUDIO_OUTPUT_DIR
+        initial = self.output_var.get().strip() or str(default_for_media)
         selected = filedialog.askdirectory(title="저장 폴더 선택", initialdir=initial)
         if selected:
             self.output_var.set(selected)
@@ -314,15 +387,34 @@ class MainWindow:
             output_dir = (PROJECT_ROOT / output_dir).resolve()
         self.last_output_dir = output_dir
 
+        media_type = self.selected_media()
+        format_or_quality = self.selected_video_quality() if media_type == "video" else self.selected_format()
+        include_subtitles = self.include_subtitles_var.get() if media_type == "video" else False
+
+        self._last_extract_args = {
+            "url": url,
+            "output_dir": output_dir,
+            "media_type": media_type,
+            "format_or_quality": format_or_quality,
+            "include_subtitles": include_subtitles,
+        }
+
+        self._execute_extract(url, output_dir, media_type, format_or_quality, include_subtitles)
+
+    def _execute_extract(
+        self,
+        url: str,
+        output_dir: Path,
+        media_type: str,
+        format_or_quality: str,
+        include_subtitles: bool,
+    ) -> None:
         self.set_busy(True)
         self.progress.configure(value=0)
         self.status_var.set("작업을 준비하는 중")
         self.set_result_text("-")
         self.open_folder_button.configure(state="disabled")
 
-        media_type = self.selected_media()
-        format_or_quality = self.selected_video_quality() if media_type == "video" else self.selected_format()
-        include_subtitles = self.include_subtitles_var.get() if media_type == "video" else False
         self.worker = threading.Thread(
             target=self._run_extract,
             args=(url, output_dir, media_type, format_or_quality, include_subtitles),
@@ -391,7 +483,44 @@ class MainWindow:
                 self.on_finished(payload)
             elif event == "failed":
                 self.on_failed(str(payload))
+            elif event == "engine_check_result":
+                self.on_engine_check_result(payload)
+            elif event == "engine_update_progress":
+                self.status_var.set(f"엔진 업데이트: {payload}")
+            elif event == "engine_update_done":
+                self.on_engine_update_done(payload)
         self.root.after(100, self._poll_events)
+
+    def on_engine_check_result(self, info: dict[str, Any]) -> None:
+        installed = info.get("installed") or "미설치"
+        latest = info.get("latest") or ""
+        if info.get("update_available"):
+            self.engine_version_var.set(f"yt-dlp v{installed} (새 버전 v{latest} 있음)")
+            self.update_engine_button.configure(text=f"엔진 업데이트 (v{latest})")
+        else:
+            self.engine_version_var.set(f"yt-dlp v{installed} (최신)")
+            self.update_engine_button.configure(text="엔진 업데이트")
+
+    def on_engine_update_done(self, payload: tuple[bool, str, bool]) -> None:
+        success, message, should_retry = payload
+        self.set_busy(False)
+        installed = get_installed_yt_dlp_version() or "최신"
+        self.engine_version_var.set(f"yt-dlp v{installed} (최신)")
+        self.update_engine_button.configure(text="엔진 업데이트")
+        self.progress.configure(value=100 if success else 0)
+
+        if success:
+            if should_retry and self._last_extract_args:
+                self.status_var.set("엔진 업데이트 완료. 추출 작업을 다시 시도합니다...")
+                self._execute_extract(**self._last_extract_args)
+            else:
+                self.status_var.set("엔진 업데이트 완료")
+                self.set_result_text(message)
+                messagebox.showinfo("엔진 업데이트 완료", message)
+        else:
+            self.status_var.set("엔진 업데이트 실패")
+            self.set_result_text(message)
+            messagebox.showerror("엔진 업데이트 실패", message)
 
     def on_progress(self, payload: dict[str, Any]) -> None:
         percent = int(payload.get("percent") or 0)
@@ -442,8 +571,20 @@ class MainWindow:
         self.set_busy(False)
 
     def on_failed(self, message: str) -> None:
-        self.show_error(message)
+        self.progress.configure(value=0)
+        self.status_var.set("실패")
+        self.set_result_text(message)
         self.set_busy(False)
+
+        # Prompt user to auto-update yt-dlp and retry
+        retry = messagebox.askyesno(
+            "추출 실패 - 엔진 업데이트 권장",
+            f"{message}\n\n"
+            "YouTube 내부 정책 변경이나 yt-dlp 구버전 문제일 수 있습니다.\n"
+            "yt-dlp 엔진을 최신 버전으로 자동 업데이트하고 바로 다시 시도하시겠습니까?",
+        )
+        if retry:
+            self.start_engine_update(should_retry=True)
 
     def set_result_text(self, text: str) -> None:
         self.result_text.configure(state="normal")
@@ -465,6 +606,7 @@ class MainWindow:
         self.url_input.configure(state=state)
         self.output_input.configure(state=state)
         self.browse_button.configure(state=state)
+        self.update_engine_button.configure(state=state)
         for _value, button in self.media_buttons:
             button.configure(state=state)
         for button in self.video_option_buttons:
